@@ -39,6 +39,8 @@
 #include "components/themes/dashboard/DashboardTheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
+#include "components/themes/minuta/QuartumGridNav.h"
+#include "components/themes/minuta/QuartumTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -327,6 +329,19 @@ bool isDashboardTheme() {
 
 bool usesMinimalHomeInteraction() { return isMinimalTheme() || isDashboardTheme(); }
 
+bool isSolumTheme() {
+  return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::SOLUM;
+}
+
+bool isQuartumTheme() {
+  return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::QUARTUM;
+}
+
+// Solum and Quartum paint covers only: no always-visible Home rows. Their actions
+// live in an on-demand button menu instead, which keeps the artwork uncluttered
+// while still exposing every Home action.
+bool usesMinutaHomeLayout() { return isSolumTheme() || isQuartumTheme(); }
+
 bool showMinimalHomeButtonHints(const MappedInputManager& mappedInput) { return !mappedInput.hasTouch(); }
 
 bool isAnyFrontButtonPressed(const MappedInputManager& mappedInput) {
@@ -527,6 +542,8 @@ CarouselCache gCarouselCache;
 
 static_assert(HomeActivity::kMaxCachedBooks >= LyraCarouselMetrics::values.homeRecentBooksCount,
               "kMaxCachedBooks must cover all carousel slots");
+static_assert(HomeActivity::kMaxCachedBooks >= QuartumMetrics::values.homeRecentBooksCount,
+              "kMaxCachedBooks must cover all Quartum slots");
 
 int HomeActivity::getMenuItemCount() const {
   if (coverGridUi) return static_cast<int>(recentBooks.size()) + (hasOpdsServers ? 5 : 4);
@@ -834,6 +851,9 @@ void HomeActivity::onEnter() {
   backPressSeen = false;
   minimalMenuIndex = 0;
   minimalHomeNavIndex = -1;
+  minutaMenuOpen = false;
+  minutaMenuIndex = 0;
+  minutaSuppressInitialFrontRelease = usesMinutaHomeLayout();
   carouselFramesReady = false;
   carouselWarmupPending = isCarouselTheme;
 
@@ -902,12 +922,24 @@ void HomeActivity::onEnter() {
     coverGridUi->begin(recentBooks, hasOpdsServers, gridHasContinueReading,
                        gridHasContinueReading ? loadRecentBookProgress(recentBooks.front()) : -1.0f);
   } else if (initialMenuItem != HomeMenuItem::NONE) {
-    const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
-    const auto menuItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings,
-                                                        includeContinueReading);
+    const auto menuItems = buildMinimalMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings);
     const int menuIndex = findMenuActionIndex(menuItems, homeActionForInitialMenuItem(initialMenuItem));
-    if (menuIndex >= 0) {
-      selectorIndex = getHomeMenuSelectionOffset(recentBooks) + menuIndex;
+    if (usesMinutaHomeLayout()) {
+      // These themes have no persistent Home rows, so a requested action opens the
+      // on-demand menu with that entry highlighted instead of moving the selection
+      // into rows that are never drawn.
+      if (menuIndex >= 0) {
+        minutaMenuOpen = true;
+        minutaMenuIndex = menuIndex;
+      }
+    } else {
+      const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
+      const auto selectableItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks,
+                                                                hasClippings, includeContinueReading);
+      const int selectableIndex = findMenuActionIndex(selectableItems, homeActionForInitialMenuItem(initialMenuItem));
+      if (selectableIndex >= 0) {
+        selectorIndex = getHomeMenuSelectionOffset(recentBooks) + selectableIndex;
+      }
     }
   }
 
@@ -1655,6 +1687,171 @@ void HomeActivity::loop() {
     return;
   }
 
+  if (usesMinutaHomeLayout()) {
+    const int releasedFrontButton = mappedInput.getReleasedFrontButton();
+
+    // Home can be entered while Back is still held (for example when leaving
+    // Settings with Back): ignore that stale release until a fresh press arrives.
+    if (minutaSuppressInitialFrontRelease) {
+      if (releasedFrontButton >= 0) {
+        minutaSuppressInitialFrontRelease = false;
+        return;
+      }
+      if (isAnyFrontButtonPressed(mappedInput)) {
+        return;
+      }
+      minutaSuppressInitialFrontRelease = false;
+    }
+
+    const int bookCount = getVisibleRecentBookCount();
+
+    if (minutaMenuOpen) {
+      const auto menuItems = buildMinimalMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings);
+      const int menuCount = static_cast<int>(menuItems.size());
+      if (menuCount <= 0) {
+        minutaMenuOpen = false;
+        requestUpdate();
+        return;
+      }
+      if (minutaMenuIndex >= menuCount) {
+        minutaMenuIndex = menuCount - 1;
+      }
+
+      auto activateMinutaMenuAction = [this, &menuItems]() {
+        switch (menuItems[minutaMenuIndex].action) {
+          case HomeMenuAction::BrowseFiles:
+            onFileBrowserOpen();
+            break;
+          case HomeMenuAction::Library:
+            onLibraryOpen();
+            break;
+          case HomeMenuAction::OpdsBrowser:
+            onOpdsBrowserOpen();
+            break;
+          case HomeMenuAction::ReadingStats:
+            onReadingStatsOpen();
+            break;
+          case HomeMenuAction::Bookmarks:
+            onSavedItemsOpen();
+            break;
+          case HomeMenuAction::FileTransfer:
+            onFileTransferOpen();
+            break;
+          case HomeMenuAction::ContinueReading:
+          case HomeMenuAction::Settings:
+            break;
+        }
+      };
+
+      int touchedMenuIndex = -1;
+      if (mappedInput.wasItemTouchedDown(touchedMenuIndex) && touchedMenuIndex >= 0 && touchedMenuIndex < menuCount) {
+        if (minutaMenuIndex != touchedMenuIndex) {
+          minutaMenuIndex = touchedMenuIndex;
+          requestUpdate();
+        }
+        return;
+      }
+      if (mappedInput.wasItemTapped(touchedMenuIndex) && touchedMenuIndex >= 0 && touchedMenuIndex < menuCount) {
+        minutaMenuIndex = touchedMenuIndex;
+        activateMinutaMenuAction();
+        return;
+      }
+
+      int touchX = 0;
+      int touchY = 0;
+      if (mappedInput.wasScreenTouchDown(touchX, touchY) &&
+          !containsPoint(MinimalTheme::buttonMenuPanelRect(renderer, menuCount), touchX, touchY)) {
+        minutaMenuOpen = false;
+        requestUpdate();
+        return;
+      }
+
+      buttonNavigator.onPreviousPress([this, menuCount] {
+        minutaMenuIndex = ButtonNavigator::previousIndex(minutaMenuIndex, menuCount);
+        requestUpdate();
+      });
+      buttonNavigator.onNextPress([this, menuCount] {
+        minutaMenuIndex = ButtonNavigator::nextIndex(minutaMenuIndex, menuCount);
+        requestUpdate();
+      });
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+        minutaMenuOpen = false;
+        requestUpdate();
+        return;
+      }
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        activateMinutaMenuAction();
+      }
+      return;
+    }
+
+    // A shrunken recents list (a deleted book) must never leave the cursor past the end.
+    if (bookCount > 0 && selectorIndex >= bookCount) {
+      selectorIndex = bookCount - 1;
+    }
+
+    // Both themes show covers only, so activation always means opening the book the
+    // cursor is on; the menu overlay has its own activation path above. This cannot
+    // reuse the generic activateSelectedHomeItem() lambda, which is declared later in
+    // loop() because it also needs the menu-row selection helpers.
+    const auto openSelectedBook = [this, bookCount]() {
+      if (selectorIndex >= 0 && selectorIndex < bookCount && selectorIndex < static_cast<int>(recentBooks.size())) {
+        onSelectBook(recentBooks[selectorIndex].path);
+      }
+    };
+
+    // Touch: the first touch moves the cursor, tapping through opens that book.
+    int touchedBookIndex = -1;
+    if (mappedInput.wasCoverTouchedDown(touchedBookIndex) && touchedBookIndex >= 0 && touchedBookIndex < bookCount) {
+      if (selectorIndex != touchedBookIndex) {
+        selectorIndex = touchedBookIndex;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasCoverTapped(touchedBookIndex) && touchedBookIndex >= 0 && touchedBookIndex < bookCount) {
+      selectorIndex = touchedBookIndex;
+      openSelectedBook();
+      return;
+    }
+
+    if (isQuartumTheme()) {
+      // Left/Right step one book, Up/Down step a row of the fixed 2x2 grid.
+      const auto moveCursor = [this, bookCount](const int delta) {
+        if (bookCount <= 1) {
+          return;
+        }
+        const int next = QuartumGridNav::nextIndex(selectorIndex, bookCount, delta);
+        if (next != selectorIndex) {
+          selectorIndex = next;
+          requestUpdate();
+        }
+      };
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [&] { moveCursor(-1); });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [&] { moveCursor(1); });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up},
+                                           [&] { moveCursor(-QuartumGridNav::kColumns); });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
+                                           [&] { moveCursor(QuartumGridNav::kColumns); });
+    } else if (canSwapHomeBook()) {
+      // Solum shows one cover, so the front buttons step through recent books.
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { showNextRecentBookOnHome(); });
+    }
+
+    if (releasedFrontButton == HalGPIO::BTN_BACK) {
+      minutaMenuOpen = true;
+      minutaMenuIndex = 0;
+      requestUpdate();
+      return;
+    }
+    if (releasedFrontButton == HalGPIO::BTN_RIGHT || releasedFrontButton == HalGPIO::BTN_CONFIRM ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      openSelectedBook();
+      return;
+    }
+    return;
+  }
+
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
   const bool carouselTouchOnly = isCarousel && mappedInput.hasTouchHardware();
@@ -2123,6 +2320,65 @@ void HomeActivity::render(RenderLock&&) {
       GUI.drawButtonHints(renderer, tr(STR_MENU),
                           SETTINGS.isLibraryFileBrowserSwapped() ? tr(STR_LIBRARY) : tr(STR_BROWSE),
                           tr(STR_SETTINGS_SHORT), recentBooks.empty() ? "" : tr(STR_READ));
+    }
+
+    displayHomeBuffer();
+
+    if (!firstRenderDone) {
+      firstRenderDone = true;
+      requestUpdate();
+      return;
+    }
+
+    if (!recentsLoaded && !recentsLoading) {
+      recentsLoading = true;
+      loadRecentCovers(metrics.homeCoverHeight);
+    }
+    return;
+  }
+
+  if (usesMinutaHomeLayout()) {
+    renderer.clearScreen();
+
+    if (minutaMenuOpen) {
+      GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+      const auto menuItems = buildMinimalMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings);
+      GUI.drawButtonMenu(
+          renderer, Rect{0, metrics.homeTopPadding, pageWidth, pageHeight - metrics.homeTopPadding},
+          static_cast<int>(menuItems.size()), minutaMenuIndex,
+          [&menuItems](int index) { return menuItems[index].label; },
+          [&menuItems](int index) { return menuItems[index].icon; });
+      if (!mappedInput.hasTouch()) {
+        const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT),
+                                                  tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      }
+      displayHomeBuffer();
+      return;
+    }
+
+    bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+
+    // Record the tile rect so the cover snapshot covers the artwork band instead of
+    // the whole framebuffer.
+    coverRectX = 0;
+    coverRectY = metrics.homeTopPadding;
+    coverRectW = pageWidth;
+    coverRectH = metrics.homeCoverTileHeight;
+
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+
+    // Neither theme shows reading progress, so no stats are passed.
+    GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
+                            recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                            std::bind(&HomeActivity::storeCoverBuffer, this), nullptr, -1.0f, nullptr, nullptr);
+
+    if (!mappedInput.hasTouch()) {
+      const char* readLabel = recentBooks.empty() ? "" : tr(STR_READ);
+      const auto labels = isQuartumTheme()
+                              ? mappedInput.mapLabels(tr(STR_MENU), readLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT))
+                              : mappedInput.mapLabels(tr(STR_MENU), "", "", readLabel);
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 
     displayHomeBuffer();

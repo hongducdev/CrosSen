@@ -23,6 +23,8 @@
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
+#include "components/themes/minuta/QuartumTheme.h"
+#include "components/themes/minuta/SolumTheme.h"
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
 
 namespace {
@@ -124,6 +126,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Dashboard theme");
       currentTheme = std::make_unique<DashboardTheme>();
       currentMetrics = &DashboardMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::SOLUM:
+      LOG_DBG("UI", "Using Solum theme");
+      currentTheme = std::make_unique<SolumTheme>();
+      currentMetrics = &SolumMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::QUARTUM:
+      LOG_DBG("UI", "Using Quartum theme");
+      currentTheme = std::make_unique<QuartumTheme>();
+      currentMetrics = &QuartumMetrics::values;
       break;
     default:
       LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));

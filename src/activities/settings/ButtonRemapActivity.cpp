@@ -220,6 +220,9 @@ bool ButtonRemapActivity::usesLyraValueBadge() const {
     case CrossPointSettings::UI_THEME::LYRA_3_COVERS:
     case CrossPointSettings::UI_THEME::LYRA_CAROUSEL:
     case CrossPointSettings::UI_THEME::MINIMAL:
+    // Solum and Quartum derive from LyraTheme and keep its list styling.
+    case CrossPointSettings::UI_THEME::SOLUM:
+    case CrossPointSettings::UI_THEME::QUARTUM:
       return true;
     default:
       return false;

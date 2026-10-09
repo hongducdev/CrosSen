@@ -252,6 +252,16 @@ device model and build.
   - "RoundedRaff" - A rounded theme with additional visual styling
   - "Cover Grid" (PSRAM devices, such as Sticky and X4 Pro) - Shows the current
     book and up to six additional book covers; tap a cover to open that book
+  - "Solum" - A one-cover theme showing your most recent book's cover with its
+    title and author underneath; the Home screen has no menu rows, so press
+    **Menu** for Browse, Library, File Transfer and Settings
+  - "Quartum" - A fixed 2x2 grid of your four most recent books; move between
+    them with the front buttons (Left/Right for the next book, Up/Down to jump a
+    row) and only the highlighted book shows its title and author. Tap a cover to
+    open that book on touch devices
+
+  Solum and Quartum do not show reading progress on the Home screen. They are
+  available on every device, unlike Cover Grid, which needs PSRAM.
 
   Themes that show reading stats hide those stats while **Track Reading Stats** is off.
 

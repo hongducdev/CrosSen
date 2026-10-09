@@ -2013,7 +2013,8 @@ class SimulatorSmokeTest {
                                              CrossPointSettings::MINIMAL,       CrossPointSettings::COVER_GRID,
                                              CrossPointSettings::LYRA,          CrossPointSettings::CLASSIC,
                                              CrossPointSettings::ROUNDEDRAFF,   CrossPointSettings::LYRA_CAROUSEL,
-                                             CrossPointSettings::LYRA_CAROUSEL, CrossPointSettings::LYRA_CAROUSEL};
+                                             CrossPointSettings::LYRA_CAROUSEL, CrossPointSettings::LYRA_CAROUSEL,
+                                             CrossPointSettings::SOLUM,         CrossPointSettings::QUARTUM};
         // Change the global values while the real Settings child is open, then
         // return through its real drawer callback. Compare with a fresh Home.
         {
@@ -2049,7 +2050,7 @@ class SimulatorSmokeTest {
             fail("Home after drawer theme change differs from fresh Home (pass %u)", homeThemePass);
         }
         LOG_INF("SMOKE", "Home theme/scale return matches fresh render (pass %u)", homeThemePass);
-        if (++homeThemePass == 10) {
+        if (++homeThemePass == 12) {
           LOG_INF("SMOKE", "Simulator smoke test passed");
           std::_Exit(0);
         }

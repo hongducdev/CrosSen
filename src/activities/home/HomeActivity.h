@@ -25,8 +25,9 @@ class HomeActivity final : public Activity {
   // Keep one rendered carousel frame in RAM. Additional frames remain available
   // through the SD snapshot cache and are paged in on demand.
   static constexpr int kCarouselFrameCount = 1;
-  // Must be >= LyraCarouselMetrics::values.homeRecentBooksCount (asserted in .cpp)
-  static constexpr int kMaxCachedBooks = 3;
+  // Must be >= LyraCarouselMetrics::values.homeRecentBooksCount and
+  // QuartumMetrics::values.homeRecentBooksCount (asserted in .cpp)
+  static constexpr int kMaxCachedBooks = 4;
 
  private:
   ButtonNavigator buttonNavigator;
@@ -51,9 +52,15 @@ class HomeActivity final : public Activity {
   bool hasOpdsServers = false;
   bool minimalMenuOpen = false;
   bool minimalSuppressInitialFrontRelease = false;
+  // Solum and Quartum paint covers only: their actions live in an on-demand
+  // button menu instead of always-visible Home rows, so they keep their own
+  // overlay state rather than sharing Minimal's front-button nav index.
+  bool minutaMenuOpen = false;
+  bool minutaSuppressInitialFrontRelease = false;
   bool homeBookSwapLongPressHandled = false;
   bool quickActionsLongPowerHandled = false;
   int minimalMenuIndex = 0;
+  int minutaMenuIndex = 0;
   int minimalHomeNavIndex = -1;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored

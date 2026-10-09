@@ -43,8 +43,8 @@ outside the panel to close the menu.
 ### Swipe left to switch recent books
 
 When at least two books are in your recent reading history, swipe left anywhere
-on a one-cover Lyra, Dashboard, or Minimal Home screen to switch to the other
-recent book.
+on a one-cover Lyra, Dashboard, Minimal, or Solum Home screen to switch to the
+other recent book.
 
 ## Cover Grid Home
 
@@ -52,6 +52,15 @@ On PSRAM devices such as Sticky and X4 Pro, choose **Settings > Display > UI
 Theme > Cover Grid** for a Home screen with the current book and up to six
 additional covers. Tap a cover to open its book. This is a separate Home theme
 from Library's **Recently Opened View** grid option.
+
+## Solum and Quartum Home
+
+**Solum** shows one cover with its title and author underneath. **Quartum** shows
+a fixed 2x2 grid of the four most recent books; the first touch moves the cursor
+to the book you touched, and tapping it again opens that book. Both Home screens
+leave out the usual rows, so use the **Menu** button for Browse, Library, File
+Transfer and Settings. Quartum's `Left`/`Right`/`Up`/`Down` hints move the cursor
+between the four slots.
 
 ## Other touch navigation
 

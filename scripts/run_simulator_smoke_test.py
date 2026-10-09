@@ -36,6 +36,8 @@ THEMES = {
     "carousel": 4,
     "dashboard": 6,
     "cover-grid": 7,
+    "solum": 8,
+    "quartum": 9,
 }
 
 

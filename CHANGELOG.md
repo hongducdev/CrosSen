@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Added
+
+- Add a Solum Home theme: one large cover with the book's title and author underneath, and no Home menu rows (press Menu for Browse, Library, File Transfer and Settings).
+- Add a Quartum Home theme: a fixed 2x2 grid of the four most recent books, with a button-driven cursor (Left/Right step one book, Up/Down step a row) where only the highlighted book shows a wrapped title and a rotated author line beside its cover.
+
 ## [v1.6.1] - 2026-10-03
 
 ### Added
