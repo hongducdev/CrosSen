@@ -3,7 +3,7 @@ title: 'Minuta themes: Solum and Quartum home themes'
 description: >-
   Port the Solum (one-cover) and Quartum (fixed 2x2 grid) home themes from
   hiitsalice/minuta into CrossInk's UI theme system
-status: in-progress
+status: completed
 priority: P2
 branch: main
 tags:
@@ -171,7 +171,7 @@ Cover-band snapshot: Solum ≈ 480×660/8 ≈ 39 KB, Quartum identical — in li
 | 1 | [Theme scaffolding](./phase-01-theme-scaffolding.md) | Completed |
 | 2 | [Solum home](./phase-02-solum-home.md) | Completed |
 | 3 | [Quartum grid](./phase-03-quartum-grid.md) | Completed |
-| 4 | [Docs and verification](./phase-04-docs-and-verification.md) | In Progress |
+| 4 | [Docs and verification](./phase-04-docs-and-verification.md) | Completed |
 
 ## Dependencies
 

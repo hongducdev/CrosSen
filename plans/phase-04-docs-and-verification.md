@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: Docs and verification
-status: in-progress
+status: completed
 priority: P2
 effort: 4h
 dependencies:
