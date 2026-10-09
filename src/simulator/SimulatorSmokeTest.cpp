@@ -2009,12 +2009,11 @@ class SimulatorSmokeTest {
       }
 
       case SmokeStep::ThemeSettings: {
-        static constexpr uint8_t themes[] = {CrossPointSettings::LYRA_3_COVERS, CrossPointSettings::DASHBOARD,
-                                             CrossPointSettings::MINIMAL,       CrossPointSettings::COVER_GRID,
-                                             CrossPointSettings::LYRA,          CrossPointSettings::CLASSIC,
-                                             CrossPointSettings::ROUNDEDRAFF,   CrossPointSettings::LYRA_CAROUSEL,
-                                             CrossPointSettings::LYRA_CAROUSEL, CrossPointSettings::LYRA_CAROUSEL,
-                                             CrossPointSettings::SOLUM,         CrossPointSettings::QUARTUM};
+        static constexpr uint8_t themes[] = {
+            CrossPointSettings::LYRA_3_COVERS, CrossPointSettings::DASHBOARD,     CrossPointSettings::MINIMAL,
+            CrossPointSettings::COVER_GRID,    CrossPointSettings::LYRA,          CrossPointSettings::CLASSIC,
+            CrossPointSettings::ROUNDEDRAFF,   CrossPointSettings::LYRA_CAROUSEL, CrossPointSettings::LYRA_CAROUSEL,
+            CrossPointSettings::LYRA_CAROUSEL, CrossPointSettings::SOLUM,         CrossPointSettings::QUARTUM};
         // Change the global values while the real Settings child is open, then
         // return through its real drawer callback. Compare with a fresh Home.
         {
