@@ -132,7 +132,7 @@ const char* lunarHoliday(const uint8_t lunarMonth, const uint8_t lunarDay) {
 }
 
 const char* weekdayName(const uint8_t weekdayIndex) {
-  static constexpr const char* kWeekdays[7] = {"Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm",
+  static constexpr const char* kWeekdays[7] = {"Thứ Hai", "Thứ Ba",  "Thứ Tư",  "Thứ Năm",
                                                "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"};
   return kWeekdays[weekdayIndex % 7];
 }
@@ -243,11 +243,9 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   const char* leapSuffix = lunar.isLeapMonth ? " (nhuận)" : "";
   char lunarTitle[128];
   if (festiveDayName != nullptr) {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: %s  ·  %s%s", festiveDayName,
-                  lunarMonthName, leapSuffix);
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: %s  ·  %s%s", festiveDayName, lunarMonthName, leapSuffix);
   } else {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: Ngày %d  ·  %s%s", lunar.day, lunarMonthName,
-                  leapSuffix);
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: Ngày %d  ·  %s%s", lunar.day, lunarMonthName, leapSuffix);
   }
 
   char yearCanChi[24];
