@@ -6,6 +6,10 @@
 - Add a Quartum Home theme: a fixed 2x2 grid of the four most recent books, with a button-driven cursor (Left/Right step one book, Up/Down step a row) where only the highlighted book shows a wrapped title and a rotated author line beside its cover.
 - Add a Calendar Block sleep screen that prints the day as a page of a Vietnamese tear-off calendar: the solar day in oversized digits, the month banner, the weekday, the lunar date with its can-chi pillars and auspicious hours, the day's holiday when there is one, and a quote about books. It shows no clock, because a sleep screen is painted once and then stays on the panel.
 
+### Fixed
+
+- Fix the lunar date printed by the sleep screens around the 2023 leap month. The engine had its own abridged new-moon series, which placed the 2023 leap month on tháng Giêng instead of tháng Hai (22/03–19/04/2023) because the 21/03/2023 new moon lands only 24 minutes after local midnight. Both sleep screens now share one engine that uses the full Jean Meeus Table 49.A series, and `test/lunar_calendar` asserts the 2023 leap-month dates so the wrong values cannot come back.
+
 ## [v1.6.1] - 2026-10-03
 
 ### Added
