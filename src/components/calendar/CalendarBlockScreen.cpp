@@ -1,7 +1,6 @@
 #include "CalendarBlockScreen.h"
 
 #include <GfxRenderer.h>
-#include <HalClock.h>
 #include <I18n.h>
 #include <LunarCalendar.h>
 
@@ -112,59 +111,6 @@ constexpr int kHeroDigitGap = 10;  // space between two day digits
 constexpr uint16_t kMinSolarYear = 1900;
 constexpr uint16_t kMaxSolarYear = 2100;
 
-void shiftDay(uint16_t& year, uint8_t& month, uint8_t& day, const int delta) {
-  if (delta == 0) return;
-  if (delta > 0) {
-    if (static_cast<int>(day) < gregorianDaysInMonth(month, year)) {
-      day++;
-      return;
-    }
-    day = 1;
-    if (month == 12) {
-      month = 1;
-      year++;
-    } else {
-      month++;
-    }
-    return;
-  }
-  if (day > 1) {
-    day--;
-    return;
-  }
-  if (month == 1) {
-    month = 12;
-    year--;
-  } else {
-    month--;
-  }
-  day = static_cast<uint8_t>(gregorianDaysInMonth(month, year));
-}
-
-// The RTC keeps UTC; the printed page must show the wall-clock day, which rolls
-// over at local midnight exactly like HalClock::formatDate().
-bool localDate(uint16_t& year, uint8_t& month, uint8_t& day) {
-  uint16_t utcYear = 0;
-  uint8_t utcMonth = 0;
-  uint8_t utcDay = 0;
-  uint8_t hour = 0;
-  uint8_t minute = 0;
-  if (!halClock.getDateTime(utcYear, utcMonth, utcDay, hour, minute)) return false;
-
-  uint8_t offsetQuarterHours = SETTINGS.clockUtcOffsetQ;
-  if (offsetQuarterHours > 104) offsetQuarterHours = 104;
-  const int localMinutes =
-      static_cast<int>(hour) * 60 + static_cast<int>(minute) + (static_cast<int>(offsetQuarterHours) - 48) * 15;
-  const int dayDelta = localMinutes < 0 ? -1 : (localMinutes >= 1440 ? 1 : 0);
-
-  year = utcYear;
-  month = utcMonth;
-  day = utcDay;
-  shiftDay(year, month, day, dayDelta);
-  if (month < 1 || month > 12) return false;
-  return day >= 1 && static_cast<int>(day) <= gregorianDaysInMonth(month, year);
-}
-
 float configuredTimeZoneHours() {
   uint8_t offsetQuarterHours = SETTINGS.clockUtcOffsetQ;
   if (offsetQuarterHours > 104) offsetQuarterHours = 104;
@@ -230,7 +176,7 @@ void drawCenteredFitted(const GfxRenderer& renderer, const int fontId, const int
 }
 
 void drawHeroDay(const GfxRenderer& renderer, const int centerX, const int top, const uint8_t day) {
-  char digits[3] = {0, 0, 0};
+  char digits[8] = {0};
   std::snprintf(digits, sizeof(digits), "%u", static_cast<unsigned>(day));
   const int count = static_cast<int>(std::strlen(digits));
 
@@ -253,16 +199,12 @@ void drawHeroDay(const GfxRenderer& renderer, const int centerX, const int top, 
 
 }  // namespace
 
-bool draw(const GfxRenderer& renderer) {
-  uint16_t year = 0;
-  uint8_t month = 0;
-  uint8_t day = 0;
-  if (!localDate(year, month, day)) {
-    return false;
-  }
-  if (year < kMinSolarYear || year > kMaxSolarYear) {
-    return false;
-  }
+bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month, const uint8_t day) {
+  // The caller hands over a local date; validate it before printing anything, so
+  // an unset RTC falls back to the default screen instead of inventing a page.
+  if (year < kMinSolarYear || year > kMaxSolarYear) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || static_cast<int>(day) > gregorianDaysInMonth(month, year)) return false;
 
   const LunarDate lunar = solarToLunar(day, month, year, configuredTimeZoneHours());
   const int julianDay = static_cast<int>(jdFromGregorian(day, month, year));

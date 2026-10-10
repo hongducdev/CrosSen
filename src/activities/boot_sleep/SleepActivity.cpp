@@ -964,12 +964,27 @@ void SleepActivity::renderDashboardSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
+namespace {
+// Defined with the other sleep-screen helpers at the bottom of this file.
+bool readLocalDateTime(struct tm& out);
+}  // namespace
+
 void SleepActivity::renderCalendarSleepScreen() const {
-  // The page is printed from the wall-clock day the device went to sleep. There
-  // is deliberately no clock on it: the panel keeps this frame until the next
-  // wake, so a time readout would be wrong within minutes.
-  if (!CalendarBlockScreen::draw(renderer)) {
+  // The page prints the wall-clock day the device went to sleep, resolved by the
+  // same helper the lunar and weather screens use, so an unset RTC falls back to
+  // the session clock instead of losing the screen. There is deliberately no
+  // clock on the page: the panel keeps this frame until the next wake.
+  struct tm localTime = {};
+  if (!readLocalDateTime(localTime)) {
     LOG_ERR("SLP", "Calendar sleep screen has no usable date; falling back to the default screen");
+    return renderDefaultSleepScreen();
+  }
+  const auto year = static_cast<uint16_t>(localTime.tm_year + 1900);
+  const auto month = static_cast<uint8_t>(localTime.tm_mon + 1);
+  const auto day = static_cast<uint8_t>(localTime.tm_mday);
+  if (!CalendarBlockScreen::draw(renderer, year, month, day)) {
+    LOG_ERR("SLP", "Calendar sleep screen cannot print %04u-%02u-%02u; falling back to the default screen",
+            static_cast<unsigned>(year), static_cast<unsigned>(month), static_cast<unsigned>(day));
     return renderDefaultSleepScreen();
   }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);

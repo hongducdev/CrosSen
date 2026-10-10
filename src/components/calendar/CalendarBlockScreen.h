@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 class GfxRenderer;
 
 // Tear-off calendar ("lịch bloc") sleep screen.
@@ -15,8 +17,9 @@ class GfxRenderer;
 namespace CalendarBlockScreen {
 
 // Paints the page into the current framebuffer but does not refresh the panel;
-// the caller owns the display refresh. Returns false when there is no usable
-// date to print, in which case nothing was drawn.
-bool draw(const GfxRenderer& renderer);
+// the caller owns the display refresh. The caller also resolves the local date,
+// so this component never touches the RTC or the UTC offset.
+// Returns false when the date cannot be printed, in which case nothing was drawn.
+bool draw(const GfxRenderer& renderer, uint16_t year, uint8_t month, uint8_t day);
 
 }  // namespace CalendarBlockScreen
