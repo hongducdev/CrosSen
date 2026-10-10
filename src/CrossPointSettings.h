@@ -37,6 +37,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME = 9,
     MINIMAL_STATS_SLEEP = 10,
     DASHBOARD_SLEEP = 11,
+    // The Vietnamese tear-off calendar page. Append-only: persisted values are
+    // indexes into SLEEP_SCREEN_STORAGE_ORDER, so existing numbers must not move.
+    CALENDAR_SLEEP = 12,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };

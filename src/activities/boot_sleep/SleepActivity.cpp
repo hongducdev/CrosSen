@@ -39,6 +39,7 @@
 #include "SleepCoverAssets.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/calendar/CalendarBlockScreen.h"
 #include "components/themes/dashboard/DashboardTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
 #include "fontIds.h"
@@ -582,6 +583,8 @@ void SleepActivity::onEnter() {
       return renderMinimalStatsSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::DASHBOARD_SLEEP):
       return renderDashboardSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::CALENDAR_SLEEP):
+      return renderCalendarSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -949,6 +952,17 @@ void SleepActivity::renderDashboardSleepScreen() const {
   DashboardTheme theme;
   theme.drawSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent, chapterTitle.c_str(),
                         sleepCoverFilterInvertsGeneratedScreen());
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+}
+
+void SleepActivity::renderCalendarSleepScreen() const {
+  // The page is printed from the wall-clock day the device went to sleep. There
+  // is deliberately no clock on it: the panel keeps this frame until the next
+  // wake, so a time readout would be wrong within minutes.
+  if (!CalendarBlockScreen::draw(renderer)) {
+    LOG_ERR("SLP", "Calendar sleep screen has no usable date; falling back to the default screen");
+    return renderDefaultSleepScreen();
+  }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
