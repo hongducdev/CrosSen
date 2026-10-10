@@ -114,5 +114,4 @@ add_subdirectory(scalable_fonts)
 
 add_subdirectory(glyph_bitmap)
 add_subdirectory(quartum_grid_nav)
-add_subdirectory(lunar_calendar)
 add_subdirectory(weather_cache)

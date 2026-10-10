@@ -330,14 +330,13 @@ inline SettingInfo buildDictionarySetting(const DictionaryRegistry* dictRegistry
 }
 
 inline SettingInfo buildSleepScreenSetting() {
-  SettingInfo s =
-      SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                        {StrId::STR_NONE_OPT, StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER,
-                         StrId::STR_COVER_CUSTOM, StrId::STR_PAGE_OVERLAY, StrId::STR_READING_STATS,
-                         StrId::STR_THEME_MINIMAL, StrId::STR_THEME_MINIMAL_STATS, StrId::STR_THEME_DASHBOARD,
-                         StrId::STR_LUNAR_CALENDAR_SLEEP, StrId::STR_WEATHER_SLEEP, StrId::STR_SLEEP_SCREEN_CALENDAR,
-                         StrId::STR_QUICK_RESUME},
-                        "sleepScreen", StrId::STR_CAT_DISPLAY);
+  SettingInfo s = SettingInfo::Enum(
+      StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
+      {StrId::STR_NONE_OPT, StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER,
+       StrId::STR_COVER_CUSTOM, StrId::STR_PAGE_OVERLAY, StrId::STR_READING_STATS, StrId::STR_THEME_MINIMAL,
+       StrId::STR_THEME_MINIMAL_STATS, StrId::STR_THEME_DASHBOARD, StrId::STR_LUNAR_CALENDAR_SLEEP,
+       StrId::STR_WEATHER_SLEEP, StrId::STR_SLEEP_SCREEN_CALENDAR, StrId::STR_QUICK_RESUME},
+      "sleepScreen", StrId::STR_CAT_DISPLAY);
   s.withEnumRawValues({
       static_cast<uint8_t>(CrossPointSettings::BLANK),
       static_cast<uint8_t>(CrossPointSettings::DARK),
@@ -591,8 +590,10 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
 // Four edge gesture entries are compiled only for touch devices.
-// The non-touch count is 105; the reserve must cover the largest build.
-inline constexpr size_t BASE_SETTINGS_CAPACITY = 105 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+// The list holds 104 rows without touch, plus the two tilt rows a device with a
+// tilt sensor adds at runtime (QuickActions::supportsTiltPageTurn()), so the
+// reserve must cover 106 on a non-touch build and 110 with touch.
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 106 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 
 const std::vector<SettingInfo>& getBaseSettingsList();
 
