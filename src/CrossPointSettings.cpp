@@ -62,6 +62,8 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
     static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::DASHBOARD_SLEEP),
+    static_cast<uint8_t>(CrossPointSettings::LUNAR_CALENDAR_SLEEP),
+    static_cast<uint8_t>(CrossPointSettings::WEATHER_SLEEP),
 };
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
     sizeof(SLEEP_SCREEN_STORAGE_ORDER) / sizeof(SLEEP_SCREEN_STORAGE_ORDER[0]);
@@ -438,6 +440,28 @@ uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
   return readingIdleTimeThresholdSecondsForUnits(readingIdleTimeThresholdUnits);
 }
 
+void CrossPointSettings::setBleBondedDevice(const char* address, const char* name, const uint8_t addressType) {
+  if (address != nullptr) {
+    strncpy(bleBondedDeviceAddr, address, sizeof(bleBondedDeviceAddr) - 1);
+    bleBondedDeviceAddr[sizeof(bleBondedDeviceAddr) - 1] = '\0';
+  } else {
+    bleBondedDeviceAddr[0] = '\0';
+  }
+  if (name != nullptr) {
+    strncpy(bleBondedDeviceName, name, sizeof(bleBondedDeviceName) - 1);
+    bleBondedDeviceName[sizeof(bleBondedDeviceName) - 1] = '\0';
+  } else {
+    bleBondedDeviceName[0] = '\0';
+  }
+  bleBondedDeviceAddrType = addressType;
+}
+
+void CrossPointSettings::clearBleBondedDevice() {
+  bleBondedDeviceAddr[0] = '\0';
+  bleBondedDeviceName[0] = '\0';
+  bleBondedDeviceAddrType = 0;
+}
+
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   std::lock_guard<std::mutex> lock(_mutex);
   for (const auto& info : getBaseSettingsList()) {
@@ -501,6 +525,12 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     quickActionSlotsJson.add(action);
   }
   doc["quickActionsTrigger"] = quickActionsTrigger;
+  // Bluetooth is not a SettingsList entry (its screen owns the toggle), but the
+  // enabled flag and the bonded remote must survive a reboot.
+  doc["bluetoothEnabled"] = bluetoothEnabled;
+  if (bleBondedDeviceAddr[0] != '\0') doc["bleBondedDeviceAddr"] = bleBondedDeviceAddr;
+  if (bleBondedDeviceName[0] != '\0') doc["bleBondedDeviceName"] = bleBondedDeviceName;
+  doc["bleBondedDeviceAddrType"] = bleBondedDeviceAddrType;
   doc["language"] = (language < getLanguageCount()) ? LANGUAGE_CODES[language] : "EN";
   if (keyboardLayouts != 0) doc["keyboardLayouts"] = keyboardLayouts;
   doc["tiltPageTurnDirectionSchema"] = TILT_DIRECTION_SCHEMA_CURRENT;
@@ -905,6 +935,20 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc, bool importingCrossPoint
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
   }
+  bluetoothEnabled = clamp(doc["bluetoothEnabled"] | static_cast<uint8_t>(0), 2, 0);
+  {
+    const char* const bondedAddr = doc["bleBondedDeviceAddr"] | static_cast<const char*>(bleBondedDeviceAddr);
+    if (bondedAddr != nullptr) {
+      strncpy(bleBondedDeviceAddr, bondedAddr, sizeof(bleBondedDeviceAddr) - 1);
+      bleBondedDeviceAddr[sizeof(bleBondedDeviceAddr) - 1] = '\0';
+    }
+    const char* const bondedName = doc["bleBondedDeviceName"] | static_cast<const char*>(bleBondedDeviceName);
+    if (bondedName != nullptr) {
+      strncpy(bleBondedDeviceName, bondedName, sizeof(bleBondedDeviceName) - 1);
+      bleBondedDeviceName[sizeof(bleBondedDeviceName) - 1] = '\0';
+    }
+  }
+  bleBondedDeviceAddrType = clamp(doc["bleBondedDeviceAddrType"] | static_cast<uint8_t>(0), 3, 0);
   if (doc["keyboardLayouts"].is<uint16_t>()) {
     keyboardLayouts = doc["keyboardLayouts"].as<uint16_t>();
   }
@@ -1226,6 +1270,8 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
   constexpr uint8_t quickResumeStorageValue = 9;
   constexpr uint8_t minimalStatsStorageValue = 10;
   constexpr uint8_t dashboardSleepStorageValue = 11;
+  constexpr uint8_t lunarCalendarStorageValue = 12;
+  constexpr uint8_t weatherStorageValue = 13;
   for (uint8_t storedValue = 0; storedValue < legacyModeCountBeforeMinimal; storedValue++) {
     if (sleepScreenStorageToMode(storedValue) != storedValue) {
       return false;
@@ -1240,7 +1286,10 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
          sleepScreenModeToStorage(MINIMAL_STATS_SLEEP) == minimalStatsStorageValue &&
          sleepScreenStorageToMode(dashboardSleepStorageValue) == DASHBOARD_SLEEP &&
          sleepScreenModeToStorage(DASHBOARD_SLEEP) == dashboardSleepStorageValue &&
-         sleepScreenStorageToMode(UINT8_MAX) == DARK;
+         sleepScreenStorageToMode(lunarCalendarStorageValue) == LUNAR_CALENDAR_SLEEP &&
+         sleepScreenModeToStorage(LUNAR_CALENDAR_SLEEP) == lunarCalendarStorageValue &&
+         sleepScreenStorageToMode(weatherStorageValue) == WEATHER_SLEEP &&
+         sleepScreenModeToStorage(WEATHER_SLEEP) == weatherStorageValue && sleepScreenStorageToMode(UINT8_MAX) == DARK;
 }
 #endif
 

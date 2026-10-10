@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <iosfwd>
 #include <mutex>
 
 #include "ReaderFontSizeStep.h"
@@ -37,6 +36,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME = 9,
     MINIMAL_STATS_SLEEP = 10,
     DASHBOARD_SLEEP = 11,
+    LUNAR_CALENDAR_SLEEP = 12,
+    WEATHER_SLEEP = 13,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -439,6 +440,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Temperature unit: 0 = Celsius (°C), 1 = Fahrenheit (°F)
+  uint8_t temperatureUnit = 0;
   // Night mode: inverted output polarity, applied to every activity per render
   // by ActivityManager. Quick Resume preserves it; other sleep screens remain normal.
   uint8_t screenInverted = 0;
@@ -630,6 +633,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t dictionaryFontPointSize = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Bluetooth HID: the enabled flag plus the remembered page turner or keyboard,
+  // so the reader can reconnect after a reboot without re-pairing. The bond keys
+  // themselves live in NVS (CONFIG_BT_NIMBLE_NVS_PERSIST), not in this file.
+  uint8_t bluetoothEnabled = 0;
+  char bleBondedDeviceAddr[18] = "";
+  char bleBondedDeviceName[33] = "";
+  uint8_t bleBondedDeviceAddrType = 0;
   // Prefer embedded EPUB titles/authors in Library; disable for filename-only scans.
   uint8_t libraryUseMetadata = 1;
   uint8_t librarySortMethod = 4;
@@ -756,6 +766,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;
+
+  // Bluetooth bond bookkeeping. BluetoothHIDManager owns the live state; these
+  // keep the persisted copy in step with it (one write per pairing/forget).
+  void setBleBondedDevice(const char* address, const char* name, uint8_t addressType);
+  void clearBleBondedDevice();
 
   bool saveToFile() const;
   bool loadFromFile();

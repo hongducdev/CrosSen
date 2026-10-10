@@ -35,6 +35,9 @@ target_compile_options(crosspoint_test_common INTERFACE
   -Wextra
   -pedantic
 )
+target_compile_definitions(crosspoint_test_common INTERFACE
+  CROSSINK_APP_CAP_BLE=0
+)
 
 enable_testing()
 include(GoogleTest)
@@ -109,3 +112,5 @@ add_subdirectory(scalable_fonts)
 
 add_subdirectory(glyph_bitmap)
 add_subdirectory(quartum_grid_nav)
+add_subdirectory(lunar_calendar)
+add_subdirectory(weather_cache)

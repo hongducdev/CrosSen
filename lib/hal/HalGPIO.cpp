@@ -23,6 +23,9 @@ HalGPIO gpio;
 
 namespace {
 constexpr unsigned long BUTTON_DEBOUNCE_REPOLL_MS = 6;
+#if CROSSINK_APP_CAP_BLE
+constexpr unsigned long VIRTUAL_BUTTON_REPRESS_DEBOUNCE_MS = 250;
+#endif
 // Poll cadence adapted from Sichroteph/YACP commit
 // 6d1f10f4bae52d282a088f9b2e45aaac96da8377 (MIT).
 constexpr unsigned long X3_USB_POLL_MS = 1000;
@@ -199,17 +202,85 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+#if CROSSINK_APP_CAP_BLE
+  if (virtualButtonState & (1u << buttonIndex)) return true;
+#endif
+  return inputMgr.isPressed(buttonIndex);
+}
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+#if CROSSINK_APP_CAP_BLE
+  const uint8_t virtualPressed = static_cast<uint8_t>(virtualButtonState & ~previousVirtualButtonState);
+  if (virtualPressed & (1u << buttonIndex)) return true;
+#endif
+  return inputMgr.wasPressed(buttonIndex);
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const {
+#if CROSSINK_APP_CAP_BLE
+  if ((virtualButtonState & ~previousVirtualButtonState) != 0) return true;
+#endif
+  return inputMgr.wasAnyPressed();
+}
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+#if CROSSINK_APP_CAP_BLE
+  const uint8_t virtualReleased = static_cast<uint8_t>(previousVirtualButtonState & ~virtualButtonState);
+  if (virtualReleased & (1u << buttonIndex)) return true;
+#endif
+  return inputMgr.wasReleased(buttonIndex);
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const {
+#if CROSSINK_APP_CAP_BLE
+  if ((previousVirtualButtonState & ~virtualButtonState) != 0) return true;
+#endif
+  return inputMgr.wasAnyReleased();
+}
 
+// Held time stays physical-only on purpose: the fork had to add per-button
+// held-time tracking to stop synthetic presses from reading as long presses, and
+// v1 avoids that whole class of bug. Consequence: holding a BLE *keyboard* key
+// still triggers the side-button long action through SideButtonShortcuts' own
+// timer, while a page-turner press is a one-shot page turn.
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
+
+#if CROSSINK_APP_CAP_BLE
+void HalGPIO::setVirtualButtonState(uint8_t buttonIndex, bool pressed) {
+  if (buttonIndex > BTN_POWER) return;
+  const uint8_t mask = static_cast<uint8_t>(1u << buttonIndex);
+  const bool alreadyDesired = (desiredVirtualButtonState & mask) != 0;
+  if (pressed == alreadyDesired) return;
+
+  const unsigned long now = millis();
+  if (pressed) {
+    // Cheap remotes can double-send the same code; ignore an immediate re-press.
+    if (virtualPressFinish[buttonIndex] != 0 &&
+        (now - virtualPressFinish[buttonIndex]) < VIRTUAL_BUTTON_REPRESS_DEBOUNCE_MS) {
+      return;
+    }
+    desiredVirtualButtonState |= mask;
+  } else {
+    desiredVirtualButtonState &= static_cast<uint8_t>(~mask);
+    virtualPressFinish[buttonIndex] = now;
+  }
+}
+
+void HalGPIO::latchVirtualButtons() {
+  previousVirtualButtonState = virtualButtonState;
+  virtualButtonState = desiredVirtualButtonState;
+}
+
+void HalGPIO::clearVirtualButtons() {
+  virtualButtonState = 0;
+  desiredVirtualButtonState = 0;
+  previousVirtualButtonState = 0;
+  for (unsigned long& finish : virtualPressFinish) {
+    finish = 0;
+  }
+}
+#endif
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 

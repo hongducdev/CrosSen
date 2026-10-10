@@ -24,6 +24,16 @@ class HalGPIO {
   InputManager inputMgr;
 #endif
 
+#if CROSSINK_APP_CAP_BLE
+  // Virtual (injected) button state for Bluetooth HID input. The manager writes
+  // the desired state and latches it once per main-loop frame, so a press or
+  // release edge stays visible for exactly one frame and is never coalesced.
+  uint8_t virtualButtonState = 0;
+  uint8_t desiredVirtualButtonState = 0;
+  uint8_t previousVirtualButtonState = 0;
+  unsigned long virtualPressFinish[7] = {0};
+#endif
+
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
   bool usbStateSampled = false;
@@ -97,6 +107,17 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+#if CROSSINK_APP_CAP_BLE
+  // Bluetooth HID injection seam. Firmware-only: the native simulator supplies
+  // its own HalGPIO and never compiles lib/hal.
+  void setVirtualButtonState(uint8_t buttonIndex, bool pressed);
+  void latchVirtualButtons();
+  void clearVirtualButtons();
+#else
+  constexpr void setVirtualButtonState(uint8_t, bool) {}
+  constexpr void latchVirtualButtons() {}
+  constexpr void clearVirtualButtons() {}
+#endif
 #if CROSSINK_APP_CAP_TOUCH
   bool hasTouch() const;
   bool supportsMultiTouch() const;

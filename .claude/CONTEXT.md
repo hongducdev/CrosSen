@@ -74,6 +74,18 @@ Refer to https://freeink.org/llms.txt for guidance.
 - A key missing from a locale falls back to English, so a partially translated file is expected and
   cannot be distinguished from a correct English value at runtime.
 
+## Lunar Calendar Engine
+
+- The `newMoon()` series in `lib/LunarCalendar/LunarCalendar.cpp` uses Jean Meeus Table 49.A
+  (25 periodic terms + E eccentricity + Omega). An earlier version used Ho Ngoc Duc's abridged
+  13-term series, which mis-assigned the Vietnamese 2023 leap month to tháng Giêng (month 1)
+  instead of the correct tháng Hai (month 2, running 22/03–19/04/2023). The root cause was
+  insufficient new-moon accuracy near the midnight boundary: the true new moon on 2023-03-21
+  17:24 UTC falls at 22/03 00:24 ICT, only 24 minutes past local midnight.
+- Never "fix" a lunar test failure by copying engine output into test expectations. Always
+  cross-check against a published Vietnamese lịch vạn niên or an independent astronomical
+  reference (e.g. PyMeeus, USNO).
+
 ## Misc Repo Gotchas
 
 - POSIX TZ signs are inverted from ISO 8601 in `TimeStore::applyTimezone()`: `"UTC-1"` means UTC+1.

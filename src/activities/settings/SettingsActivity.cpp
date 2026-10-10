@@ -16,6 +16,9 @@
 #include "AppCapabilities.h"
 #include "AppVersion.h"
 #include "BackupStatsActivity.h"
+#if CROSSINK_APP_CAP_BLE
+#include "BluetoothSettingsActivity.h"
+#endif
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockOffsetActivity.h"
@@ -23,6 +26,7 @@
 #include "CrossPointSettings.h"
 #include "DeviceCapabilities.h"
 #include "FontSelectionActivity.h"
+#include "WeatherSyncActivity.h"
 #if CROSSINK_SCALABLE_FONTS
 #include "TtfRenderOptionsActivity.h"
 #endif
@@ -1216,6 +1220,14 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ClockSync:
         startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::Bluetooth:
+#if CROSSINK_APP_CAP_BLE
+        startActivityForResult(std::make_unique<BluetoothSettingsActivity>(renderer, mappedInput), resultHandler);
+#endif
+        break;
+      case SettingAction::WeatherSync:
+        startActivityForResult(std::make_unique<WeatherSyncActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::QuickActions:
         startActivityForResult(std::make_unique<QuickActionsActivity>(renderer, mappedInput), resultHandler);

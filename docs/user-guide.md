@@ -663,6 +663,8 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Page Overlay**   | Keeps the current reader page visible and draws a sleep wallpaper over it. If no wallpaper is available, the page remains visible while reading.       |
 | **Minimal**        | A compact sleep screen based on the Minimal home layout.                                                                                               |
 | **Minimal Stats**  | A compact sleep screen with recent reading stats, on supported devices; falls back to **Minimal** while tracking is off for the device or recent book. |
+| **Lunar Calendar** | The digital clock and Vietnamese lunar calendar: the lunar date (with leap-month marking), Can-Chi for the year, month and day, the current solar term (tiết khí), Vietnamese holidays such as Tết and Rằm, and a month grid showing lunar days under each solar date. Needs a synced clock; shows a sync hint otherwise. |
+| **Weather**        | The cached weather for your location: temperature, condition and icon, feels-like, humidity, wind, a five-day forecast and the last update time. Weather is downloaded by **Settings -> System -> Device -> Sync Weather**, so the screen never turns on Wi-Fi itself. |
 | **None**           | A blank screen.                                                                                                                                        |
 
 #### Cover settings

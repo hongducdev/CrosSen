@@ -4,6 +4,14 @@
 
 - Add a Solum Home theme: one large cover with the book's title and author underneath, and no Home menu rows (press Menu for Browse, Library, File Transfer and Settings).
 - Add a Quartum Home theme: a fixed 2x2 grid of the four most recent books, with a button-driven cursor (Left/Right step one book, Up/Down step a row) where only the highlighted book shows a wrapped title and a rotated author line beside its cover.
+- Add a **Lunar Calendar** sleep screen showing the digital clock, the Vietnamese lunar date (ngày, tháng, năm âm lịch, including leap months), Can-Chi for the year, month and day, the active solar term (tiết khí), Vietnamese holidays such as Tết and Rằm, and a month grid with lunar day numbers under each solar date.
+- Add a **Weather** sleep screen showing the current temperature, condition text and icon, feels-like, humidity, wind speed, a five-day forecast row and the time the data was last updated. It renders from the SD card cache, so it never opens Wi-Fi while sleeping.
+- Add **Settings → System → Device → Sync Weather**, which connects to Wi-Fi when needed, detects the location, downloads the forecast from Open-Meteo and caches it for the Weather sleep screen.
+- Add a **Temperature Unit** display setting to switch weather values between Celsius and Fahrenheit.
+
+### Fixed
+
+- Fix the lunar calendar engine mis-assigning the Vietnamese 2023 leap month to tháng Giêng instead of tháng Hai (leap month 2, 22/03–19/04/2023). Replace the abridged Ho Ngoc Duc 13-term new-moon series with the full Jean Meeus Table 49.A (25 periodic terms, E eccentricity factor, Omega node term), improving new-moon accuracy from ~8 minutes to ~1.6 minutes worst-case. Also correct the unit test that had locked in the engine’s wrong values.
 
 ## [v1.6.1] - 2026-10-03
 

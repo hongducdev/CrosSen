@@ -28,6 +28,11 @@
 
 #include "AppCapabilities.h"
 
+#if CROSSINK_APP_CAP_BLE
+#include <BluetoothHIDManager.h>
+#include <WiFi.h>
+#endif
+
 #ifdef SIMULATOR
 using esp_reset_reason_t = int;
 using esp_sleep_wakeup_cause_t = int;
@@ -1086,6 +1091,12 @@ void mirrorWakeShortPressToNvs() {
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+#if CROSSINK_APP_CAP_BLE
+  // The radio cannot survive deep sleep: release it (and the heap it holds)
+  // first. A running worker is skipped rather than waited for, because the chip
+  // resets anyway and blocking the sleep path is worse than a lost attempt.
+  BluetoothHIDManager::getInstance().shutdownForSleep();
+#endif
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -1352,6 +1363,24 @@ void setup() {
                                wakeupRouteName(wakeupReason));
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
+#if CROSSINK_APP_CAP_BLE
+  // Restore Bluetooth before the first screen paints, so a bonded remote is
+  // usable immediately. Network boot targets keep the radio for Wi-Fi only.
+  if (!isNetworkResume) {
+    BluetoothHIDManager& bluetooth = BluetoothHIDManager::getInstance();
+    bluetooth.setBondedDevice(SETTINGS.bleBondedDeviceAddr, SETTINGS.bleBondedDeviceName,
+                              SETTINGS.bleBondedDeviceAddrType);
+    if (SETTINGS.bluetoothEnabled) {
+      if (!bluetooth.enable()) {
+        LOG_ERR("BT", "Restore failed: %s", bluetooth.lastError());
+        SETTINGS.bluetoothEnabled = 0;
+        SETTINGS.saveToFile();
+      } else if (bluetooth.hasBond()) {
+        bluetooth.startReconnect();
+      }
+    }
+  }
+#endif
   // Normal boot store deferral adapted from Sichroteph/YACP commit
   // 20af8aee8d3e1d560456753b08d1f52e5488621f (MIT). Accessors load these
   // stores when Home, reader bookkeeping, or sync actually need them.
@@ -1628,6 +1657,35 @@ void loop() {
   // hardware input frame. A shortcut may open an activity that never queries
   // the originating button, so its one-shot release guard must still expire.
   mappedInputManager.update();
+#if CROSSINK_APP_CAP_BLE
+  BluetoothHIDManager& bluetooth = BluetoothHIDManager::getInstance();
+  // One queued HID report per frame; the manager latches the virtual button
+  // state so a press or release edge stays visible for this whole frame.
+  const int8_t blePageTurn = bluetooth.applyEvents(gpio).pageTurn;
+  if (bluetooth.consumeBondChanged()) {
+    SETTINGS.setBleBondedDevice(bluetooth.bondedAddress(), bluetooth.bondedName(), bluetooth.bondedAddressType());
+    SETTINGS.saveToFile();
+  }
+  bluetooth.update(gpio.wasAnyPressed() || gpio.wasAnyReleased());
+  // Wi-Fi and BLE are mutually exclusive on this single-core board with ~380 KB
+  // of internal RAM: hand the radio to Wi-Fi while a session runs, take it back
+  // afterwards. One choke point instead of edits in every Wi-Fi activity.
+  {
+    static bool releasedForWifi = false;
+    const bool wifiActive = WiFi.getMode() != WIFI_OFF;
+    if (wifiActive && bluetooth.isEnabled() && !bluetooth.isWorkerRunning()) {
+      if (bluetooth.disable()) {
+        releasedForWifi = true;
+        LOG_INF("BT", "Released Bluetooth for Wi-Fi");
+      }
+    } else if (!wifiActive && releasedForWifi && SETTINGS.bluetoothEnabled) {
+      if (bluetooth.enable()) {
+        releasedForWifi = false;
+        if (bluetooth.hasBond()) bluetooth.startReconnect();
+      }
+    }
+  }
+#endif
 #ifdef SIMULATOR
   simulatorHomeKeyInput.update();
 #endif
@@ -1802,6 +1860,14 @@ void loop() {
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
+#if CROSSINK_APP_CAP_BLE
+    if (BluetoothHIDManager::getInstance().isWorkerRunning()) {
+      // Bounded by the worker's own scan timeout, so this cannot hang the sleep.
+      LOG_DBG("SLP", "Auto-sleep deferred: Bluetooth worker active");
+      delay(50);
+      return;
+    }
+#endif
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
@@ -1861,6 +1927,24 @@ void loop() {
     }
   }
 
+#if CROSSINK_APP_CAP_BLE
+  // A page-turner key turns the page through the same injected-release path the
+  // Chord Page Turn uses, so it works whatever the side-button settings are.
+  // Applied only past the Quick Lock and modal gates, and only in a reader.
+  if (blePageTurn != 0) {
+    if (!buttonShortcutController.isQuickLocked() && !modalOwnsInput && activityManager.isReaderActivity()) {
+      mappedInputManager.injectRelease(blePageTurn > 0 ? MappedInputManager::Button::Right
+                                                       : MappedInputManager::Button::Left);
+      activityManager.loop();
+      mappedInputManager.clearInjectedReleases();
+      lastActivityTime = millis();
+      powerManager.setPowerSaving(false);
+      return;
+    }
+    LOG_DBG("BT", "Page turn ignored outside an unlocked reader");
+  }
+#endif
+
   const unsigned long activityStartTime = millis();
   activityManager.loop();
 #if CROSSINK_APP_CAP_TOUCH
@@ -1899,8 +1983,12 @@ void loop() {
     }
     skipLoopDelay = activityManager.skipLoopDelay();
   }
-  if (skipLoopDelay) {
-    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
+  bool bleWorkerActive = false;
+#if CROSSINK_APP_CAP_BLE
+  bleWorkerActive = BluetoothHIDManager::getInstance().isWorkerRunning();
+#endif
+  if (skipLoopDelay || bleWorkerActive) {
+    powerManager.setPowerSaving(false);  // Keep full performance while BLE work is active
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {

@@ -53,6 +53,8 @@ enum class SettingAction {
   DownloadFonts,
   TtfRendering,
   ClockSync,
+  Bluetooth,
+  WeatherSync,
 };
 
 struct SettingInfo {

@@ -2,7 +2,7 @@
 #include <string>
 #include <utility>
 
-#include "activities/Activity.h"
+#include "../Activity.h"
 
 class Bitmap;
 
@@ -28,6 +28,8 @@ class SleepActivity final : public Activity {
   void renderMinimalSleepScreen() const;
   void renderMinimalStatsSleepScreen() const;
   void renderDashboardSleepScreen() const;
+  void renderLunarCalendarSleepScreen() const;
+  void renderWeatherSleepScreen() const;
   bool renderBitmapSleepScreen(Bitmap& bitmap) const;
   void renderLastScreenSleepScreen() const;
   void renderBlankSleepScreen() const;

@@ -8,10 +8,13 @@
 #include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <LunarCalendar.h>
 #include <Memory.h>
 #include <PNGdec.h>
+#include <WeatherCache.h>
 // PNGdec's bundled zlib internals leak this macro into later FreeInkUI headers.
 #undef local
 #include <Xtc.h>
@@ -31,7 +34,6 @@
 #include "../reader/TxtReaderActivity.h"
 #include "../reader/XtcReaderActivity.h"
 #include "AppCapabilities.h"
-#include "AppVersion.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "ImageFolderIndex.h"
@@ -39,6 +41,7 @@
 #include "SleepCoverAssets.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/icons/weather.h"
 #include "components/themes/dashboard/DashboardTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
 #include "fontIds.h"
@@ -582,6 +585,10 @@ void SleepActivity::onEnter() {
       return renderMinimalStatsSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::DASHBOARD_SLEEP):
       return renderDashboardSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::LUNAR_CALENDAR_SLEEP):
+      return renderLunarCalendarSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::WEATHER_SLEEP):
+      return renderWeatherSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -600,6 +607,8 @@ bool SleepActivity::rendersBeforeExit() const {
     case CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT:
     case CrossPointSettings::SLEEP_SCREEN_MODE::BLANK:
     case CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM:
+    case CrossPointSettings::SLEEP_SCREEN_MODE::LUNAR_CALENDAR_SLEEP:
+    case CrossPointSettings::SLEEP_SCREEN_MODE::WEATHER_SLEEP:
       return true;
     case CrossPointSettings::SLEEP_SCREEN_MODE::COVER:
     case CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM: {
@@ -1294,4 +1303,451 @@ void SleepActivity::renderOverlaySleepScreen() const {
   renderer.displayGrayBuffer(TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
   renderer.setRenderMode(GfxRenderer::BW);
   renderer.restoreBwBuffer();
+}
+
+// ── Lunar Calendar & Weather Sleep Screen Helpers ───────────────────────────
+
+namespace {
+
+// Local wall-clock date/time for the calendar and weather screens.
+//
+// The session clock wins when NTP has set it. Otherwise the RTC is read, which
+// stores UTC, so the configured offset is applied before use: without that shift
+// the lunar date rolls over at UTC midnight instead of local midnight and shows
+// yesterday's date for the whole Vietnamese evening.
+bool readLocalDateTime(struct tm& out) {
+  time_t now = 0;
+  time(&now);
+  struct tm sessionTime = {};
+#if defined(_WIN32) && !defined(__CYGWIN__)
+  localtime_s(&sessionTime, &now);
+#else
+  localtime_r(&now, &sessionTime);
+#endif
+  if (sessionTime.tm_year >= 125) {
+    out = sessionTime;
+    return true;
+  }
+
+  if (!halClock.isAvailable()) return false;
+
+  uint16_t year = 0;
+  uint8_t month = 0;
+  uint8_t day = 0;
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  if (!halClock.getDateTime(year, month, day, hour, minute)) return false;
+  if (year < 2025 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  int localYear = static_cast<int>(year);
+  int localMonth = static_cast<int>(month);
+  int localDay = static_cast<int>(day);
+  int localHour = static_cast<int>(hour);
+  int localMinute = static_cast<int>(minute);
+  const uint8_t offsetQ = SETTINGS.clockUtcOffsetQ > 104 ? 104 : SETTINGS.clockUtcOffsetQ;
+  shiftCivilMinutes(localYear, localMonth, localDay, localHour, localMinute, (static_cast<int>(offsetQ) - 48) * 15);
+
+  out = {};
+  out.tm_year = localYear - 1900;
+  out.tm_mon = localMonth - 1;
+  out.tm_mday = localDay;
+  out.tm_hour = localHour;
+  out.tm_min = localMinute;
+  out.tm_wday = gregorianWeekday(localDay, localMonth, localYear);
+  return true;
+}
+
+void drawSegDigit(const GfxRenderer& renderer, int x, int y, int dw, int dh, int digit) {
+  static const uint8_t SEGS[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
+  const uint8_t s = (digit >= 0 && digit <= 9) ? SEGS[digit] : 0x40;  // 0x40 = dash
+  const int t = dh / 14;
+  const int g = 2;
+  const int mh = dh / 2;
+
+  // Horizontal segments
+  if (s & 0x01) renderer.fillRect(x + t + g, y, dw - 2 * (t + g), t, true);
+  if (s & 0x40) renderer.fillRect(x + t + g, y + mh, dw - 2 * (t + g), t, true);
+  if (s & 0x08) renderer.fillRect(x + t + g, y + dh - t, dw - 2 * (t + g), t, true);
+
+  // Vertical top-half
+  if (s & 0x20) renderer.fillRect(x, y + t + g, t, mh - t - 2 * g, true);
+  if (s & 0x02) renderer.fillRect(x + dw - t, y + t + g, t, mh - t - 2 * g, true);
+
+  // Vertical bottom-half
+  if (s & 0x10) renderer.fillRect(x, y + mh + t + g, t, dh - mh - 2 * t - 2 * g, true);
+  if (s & 0x04) renderer.fillRect(x + dw - t, y + mh + t + g, t, dh - mh - 2 * t - 2 * g, true);
+}
+
+void drawWeatherIcon32(const GfxRenderer& r, const uint8_t* icon, int x, int y) {
+  if (!icon) return;
+  for (int row = 0; row < 32; row++) {
+    for (int col = 0; col < 32; col++) {
+      int byteIdx = row * 4 + (col / 8);
+      int bitIdx = 7 - (col % 8);
+      if (!((icon[byteIdx] >> bitIdx) & 1)) {
+        r.drawPixel(x + col, y + row, true);
+      }
+    }
+  }
+}
+
+void drawWeatherIcon64(const GfxRenderer& r, const uint8_t* icon, int x, int y) {
+  if (!icon) return;
+  for (int row = 0; row < 32; row++) {
+    for (int col = 0; col < 32; col++) {
+      int byteIdx = row * 4 + (col / 8);
+      int bitIdx = 7 - (col % 8);
+      if (!((icon[byteIdx] >> bitIdx) & 1)) {
+        r.fillRect(x + col * 2, y + row * 2, 2, 2, true);
+      }
+    }
+  }
+}
+
+const char* weatherConditionToText(int code) {
+  if (code == 0) return tr(STR_WEATHER_CLEAR);
+  if (code <= 3) return tr(STR_WEATHER_PARTLY_CLOUDY);
+  if (code <= 48) return tr(STR_WEATHER_FOG);
+  if (code <= 57) return tr(STR_WEATHER_DRIZZLE);
+  if (code <= 67) return tr(STR_WEATHER_RAIN);
+  if (code <= 77) return tr(STR_WEATHER_SNOW);
+  if (code <= 82) return tr(STR_WEATHER_SHOWERS);
+  return tr(STR_WEATHER_THUNDERSTORM);
+}
+
+}  // namespace
+
+void SleepActivity::renderLunarCalendarSleepScreen() const {
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  // Battery percentage
+  char battBuf[8];
+  snprintf(battBuf, sizeof(battBuf), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+  const int battW = renderer.getTextWidth(SMALL_FONT_ID, battBuf);
+  renderer.drawText(SMALL_FONT_ID, pageWidth - battW - 16, 12, battBuf);
+
+  // Time & Date acquisition
+  struct tm timeinfo = {};
+  const bool timeValid = readLocalDateTime(timeinfo);
+
+  if (!timeValid) {
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 25, tr(STR_LUNAR_CALENDAR_SLEEP), true,
+                              EpdFontFamily::BOLD);
+    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 10, tr(STR_CLOCK_SYNC_NO_WIFI_HINT));
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+    return;
+  }
+
+  // Top header: brand and solar date
+  renderer.drawText(SMALL_FONT_ID, 16, 12, tr(STR_CROSSINK));
+  renderer.drawLine(16, 30, pageWidth - 16, 30, true);
+
+  const int solarDay = timeinfo.tm_mday;
+  const int solarMonth = timeinfo.tm_mon + 1;
+  const int solarYear = timeinfo.tm_year + 1900;
+
+  static const StrId DAY_NAMES[] = {StrId::STR_DAY_SUN, StrId::STR_DAY_MON, StrId::STR_DAY_TUE, StrId::STR_DAY_WED,
+                                    StrId::STR_DAY_THU, StrId::STR_DAY_FRI, StrId::STR_DAY_SAT};
+  char solarDateBuf[64];
+  snprintf(solarDateBuf, sizeof(solarDateBuf), "%s, %02d/%02d/%d", I18N.get(DAY_NAMES[timeinfo.tm_wday % 7]), solarDay,
+           solarMonth, solarYear);
+  renderer.drawCenteredText(UI_10_FONT_ID, 38, solarDateBuf);
+
+  // 7-segment digital time (HH:MM)
+  constexpr int DW = 36;
+  constexpr int DH = 56;
+  constexpr int DGAP = 5;
+  constexpr int CW = 16;
+  const int clockW = 4 * DW + 2 * DGAP + CW;
+  const int clockX = (pageWidth - clockW) / 2;
+  const int clockY = 66;
+
+  const int h0 = timeinfo.tm_hour / 10, h1 = timeinfo.tm_hour % 10;
+  const int m0 = timeinfo.tm_min / 10, m1 = timeinfo.tm_min % 10;
+  drawSegDigit(renderer, clockX, clockY, DW, DH, h0);
+  drawSegDigit(renderer, clockX + DW + DGAP, clockY, DW, DH, h1);
+
+  constexpr int DOT = 6;
+  const int colonX = clockX + 2 * DW + 2 * DGAP + (CW - DOT) / 2;
+  renderer.fillRect(colonX, clockY + DH / 3 - DOT / 2, DOT, DOT, true);
+  renderer.fillRect(colonX, clockY + 2 * DH / 3 - DOT / 2, DOT, DOT, true);
+
+  drawSegDigit(renderer, clockX + 2 * DW + 2 * DGAP + CW, clockY, DW, DH, m0);
+  drawSegDigit(renderer, clockX + 3 * DW + 2 * DGAP + CW + DGAP, clockY, DW, DH, m1);
+
+  // Lunar Date computation
+  LunarDate lunar = solarToLunar(solarDay, solarMonth, solarYear, 7.0);
+  CanChi yearCC = getCanChiYear(lunar.year);
+  CanChi monthCC = getCanChiMonth(lunar.month, lunar.year);
+  CanChi dayCC = getCanChiDay(solarDay, solarMonth, solarYear);
+  const char* solarTerm = getSolarTermName(solarDay, solarMonth, solarYear, 7.0);
+  const char* holiday = getVietnameseHoliday(solarDay, solarMonth, lunar);
+
+  // Hero Card: Lunar Info
+  const int cardMargin = 16;
+  const int cardW = pageWidth - cardMargin * 2;
+  const int heroCardY = 134;
+  const int heroCardH = 146;
+  renderer.drawRoundedRect(cardMargin, heroCardY, cardW, heroCardH, 1, 8, true);
+
+  // Left col inside card: Big lunar day number
+  const int leftColW = 100;
+  const int leftColCenterX = cardMargin + leftColW / 2;
+  char lunarDayStr[8];
+  snprintf(lunarDayStr, sizeof(lunarDayStr), "%d", lunar.day);
+  const int numW = renderer.getTextWidth(LEXENDDECA_16_FONT_ID, lunarDayStr);
+  renderer.drawText(LEXENDDECA_16_FONT_ID, leftColCenterX - numW / 2, heroCardY + 36, lunarDayStr, true,
+                    EpdFontFamily::BOLD);
+  const int lblW = renderer.getTextWidth(SMALL_FONT_ID, tr(STR_LUNAR_DATE));
+  renderer.drawText(SMALL_FONT_ID, leftColCenterX - lblW / 2, heroCardY + 98, tr(STR_LUNAR_DATE));
+
+  // Vertical divider inside hero card
+  renderer.drawLine(cardMargin + leftColW, heroCardY + 12, cardMargin + leftColW, heroCardY + heroCardH - 12, true);
+
+  // Right col lines inside hero card
+  const int rightX = cardMargin + leftColW + 14;
+  char monthYearBuf[64];
+  if (lunar.isLeapMonth) {
+    snprintf(monthYearBuf, sizeof(monthYearBuf), tr(STR_LUNAR_MONTH_YEAR_LEAP_FORMAT), lunar.month, yearCC.can,
+             yearCC.chi);
+  } else {
+    snprintf(monthYearBuf, sizeof(monthYearBuf), tr(STR_LUNAR_MONTH_YEAR_FORMAT), lunar.month, yearCC.can, yearCC.chi);
+  }
+  renderer.drawText(UI_10_FONT_ID, rightX, heroCardY + 16, monthYearBuf, true, EpdFontFamily::BOLD);
+
+  char canChiDayMonthBuf[64];
+  snprintf(canChiDayMonthBuf, sizeof(canChiDayMonthBuf), tr(STR_LUNAR_DAY_CANCHI_FORMAT), dayCC.can, dayCC.chi);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 44, canChiDayMonthBuf);
+
+  char canChiMonthBuf[64];
+  snprintf(canChiMonthBuf, sizeof(canChiMonthBuf), tr(STR_LUNAR_MONTH_CANCHI_FORMAT), monthCC.can, monthCC.chi);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 68, canChiMonthBuf);
+
+  char solarTermBuf[48];
+  snprintf(solarTermBuf, sizeof(solarTermBuf), "%s: %s", tr(STR_SOLAR_TERM), solarTerm);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 92, solarTermBuf);
+
+  if (holiday) {
+    char holBuf[64];
+    snprintf(holBuf, sizeof(holBuf), "★ %s", holiday);
+    renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 116, holBuf, true, EpdFontFamily::BOLD);
+  }
+
+  // Monthly Calendar Grid Card
+  const int calCardY = 294;
+  const int calCardH = pageHeight - calCardY - 36;
+  renderer.drawRoundedRect(cardMargin, calCardY, cardW, calCardH, 1, 8, true);
+
+  // Calendar Header: Month and Year
+  char calHdrBuf[48];
+  snprintf(calHdrBuf, sizeof(calHdrBuf), tr(STR_LUNAR_GRID_HEADER_FORMAT), solarMonth, solarYear);
+  renderer.drawCenteredText(UI_10_FONT_ID, calCardY + 10, calHdrBuf, true, EpdFontFamily::BOLD);
+
+  // Weekday columns: CN, T2, T3, T4, T5, T6, T7
+  static const StrId CAL_DAY_HDR[] = {StrId::STR_CAL_SUN, StrId::STR_CAL_MON, StrId::STR_CAL_TUE, StrId::STR_CAL_WED,
+                                      StrId::STR_CAL_THU, StrId::STR_CAL_FRI, StrId::STR_CAL_SAT};
+  const int cellW = (cardW - 16) / 7;
+  const int gridLeft = cardMargin + (cardW - cellW * 7) / 2;
+  const int hdrY = calCardY + 34;
+
+  for (int d = 0; d < 7; d++) {
+    int cx = gridLeft + d * cellW + cellW / 2;
+    int tw = renderer.getTextWidth(SMALL_FONT_ID, I18N.get(CAL_DAY_HDR[d]));
+    renderer.drawText(SMALL_FONT_ID, cx - tw / 2, hdrY, I18N.get(CAL_DAY_HDR[d]), true, EpdFontFamily::BOLD);
+  }
+  renderer.drawLine(cardMargin + 8, hdrY + 18, cardMargin + cardW - 8, hdrY + 18, true);
+
+  // Compute first day of month weekday
+  const int startCol = gregorianWeekday(1, solarMonth, solarYear);
+  const int maxDays = gregorianDaysInMonth(solarMonth, solarYear);
+
+  const int cellH = (calCardH - 62) / 6;
+  int rowY = hdrY + 22;
+  int col = startCol;
+
+  for (int day = 1; day <= maxDays; day++) {
+    int cx = gridLeft + col * cellW;
+    LunarDate cellLunar = solarToLunar(day, solarMonth, solarYear, 7.0);
+
+    char sBuf[12];
+    snprintf(sBuf, sizeof(sBuf), "%d", day);
+    int tw = renderer.getTextWidth(SMALL_FONT_ID, sBuf);
+
+    char lBuf[16];
+    if (cellLunar.day == 1) {
+      snprintf(lBuf, sizeof(lBuf), "%d/%d", cellLunar.day, cellLunar.month);
+    } else {
+      snprintf(lBuf, sizeof(lBuf), "%d", cellLunar.day);
+    }
+    int ltw = renderer.getTextWidth(SMALL_FONT_ID, lBuf);
+
+    if (day == solarDay) {
+      renderer.fillRect(cx + 2, rowY - 2, cellW - 4, cellH - 2, true);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, rowY, sBuf, false, EpdFontFamily::BOLD);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, rowY + 16, lBuf, false);
+    } else {
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, rowY, sBuf);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, rowY + 16, lBuf);
+    }
+
+    if (++col == 7) {
+      col = 0;
+      rowY += cellH;
+    }
+  }
+
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 20, tr(STR_LUNAR_CALENDAR_SLEEP));
+
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+}
+
+void SleepActivity::renderWeatherSleepScreen() const {
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+
+  renderer.clearScreen();
+
+  // Battery percentage
+  char battBuf[8];
+  snprintf(battBuf, sizeof(battBuf), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+  const int battW = renderer.getTextWidth(SMALL_FONT_ID, battBuf);
+  renderer.drawText(SMALL_FONT_ID, pageWidth - battW - 16, 12, battBuf);
+
+  // Top header: Weather
+  renderer.drawText(SMALL_FONT_ID, 16, 12, tr(STR_WEATHER));
+  renderer.drawLine(16, 30, pageWidth - 16, 30, true);
+
+  WeatherData weather;
+  DailyForecast forecast[WeatherCache::MAX_FORECAST_DAYS];
+  int forecastCount = 0;
+  char cityName[32] = "";
+  char updateTime[16] = "";
+
+  const bool hasCache = WeatherCache::load(weather, forecast, WeatherCache::MAX_FORECAST_DAYS, forecastCount, cityName,
+                                           sizeof(cityName), updateTime, sizeof(updateTime));
+
+  if (!hasCache) {
+    drawWeatherIcon64(renderer, WeatherCloudyIcon, (pageWidth - 64) / 2, pageHeight / 2 - 100);
+    renderer.drawCenteredText(UI_12_FONT_ID, pageHeight / 2 - 20, tr(STR_NO_WEATHER_DATA), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 16, tr(STR_SYNC_WEATHER_HINT));
+
+    struct tm ti = {};
+    if (readLocalDateTime(ti)) {
+      char tBuf[48];
+      snprintf(tBuf, sizeof(tBuf), "%02d:%02d - %02d/%02d/%d", ti.tm_hour, ti.tm_min, ti.tm_mday, ti.tm_mon + 1,
+               ti.tm_year + 1900);
+      renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 24, tBuf);
+    }
+
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+    return;
+  }
+
+  // 1. City Name
+  int curY = 50;
+  const char* displayCity = cityName[0] ? cityName : "Vietnam";
+  renderer.drawCenteredText(UI_12_FONT_ID, curY, displayCity, true, EpdFontFamily::BOLD);
+  curY += renderer.getLineHeight(UI_12_FONT_ID) + 6;
+
+  // 2. Weather Condition Text
+  const char* condText = weatherConditionToText(weather.weatherCode);
+  renderer.drawCenteredText(UI_10_FONT_ID, curY, condText);
+  curY += renderer.getLineHeight(UI_10_FONT_ID) + 14;
+
+  // 3. Large Weather Icon (64x64 via pixel doubling)
+  const uint8_t* mainIcon = getWeatherIcon(weather.weatherCode);
+  drawWeatherIcon64(renderer, mainIcon, (pageWidth - 64) / 2, curY);
+  curY += 76;
+
+  // 4. Large Temperature
+  const uint8_t unit = SETTINGS.temperatureUnit;
+  char tempBuf[16];
+  snprintf(tempBuf, sizeof(tempBuf), "%.0f%s", WeatherCache::convertTemp(weather.temperature, unit),
+           WeatherCache::tempUnitSuffix(unit));
+  renderer.drawCenteredText(LEXENDDECA_16_FONT_ID, curY, tempBuf, true, EpdFontFamily::BOLD);
+  curY += renderer.getLineHeight(LEXENDDECA_16_FONT_ID) + 6;
+
+  // 5. Feels Like
+  char feelsBuf[32];
+  snprintf(feelsBuf, sizeof(feelsBuf), "%s %.0f%s", tr(STR_FEELS_LIKE),
+           WeatherCache::convertTemp(weather.feelsLike, unit), WeatherCache::tempUnitSuffix(unit));
+  renderer.drawCenteredText(SMALL_FONT_ID, curY, feelsBuf);
+  curY += renderer.getLineHeight(SMALL_FONT_ID) + 18;
+
+  // 6. Details Card (Humidity & Wind)
+  const int cardMargin = 20;
+  const int cardW = pageWidth - cardMargin * 2;
+  const int cardH = 74;
+  renderer.drawRoundedRect(cardMargin, curY, cardW, cardH, 1, 8, true);
+
+  const int colW = cardW / 2;
+  const int detailTextY = curY + 12;
+
+  char humTitle[24];
+  snprintf(humTitle, sizeof(humTitle), "%s", tr(STR_HUMIDITY));
+  int tw = renderer.getTextWidth(SMALL_FONT_ID, humTitle);
+  renderer.drawText(SMALL_FONT_ID, cardMargin + (colW - tw) / 2, detailTextY, humTitle);
+
+  char humVal[16];
+  snprintf(humVal, sizeof(humVal), "%d%%", weather.humidity);
+  tw = renderer.getTextWidth(UI_10_FONT_ID, humVal);
+  renderer.drawText(UI_10_FONT_ID, cardMargin + (colW - tw) / 2, detailTextY + 24, humVal, true, EpdFontFamily::BOLD);
+
+  renderer.drawLine(cardMargin + colW, curY + 8, cardMargin + colW, curY + cardH - 8, true);
+
+  char windTitle[24];
+  snprintf(windTitle, sizeof(windTitle), "%s", tr(STR_WIND));
+  tw = renderer.getTextWidth(SMALL_FONT_ID, windTitle);
+  renderer.drawText(SMALL_FONT_ID, cardMargin + colW + (colW - tw) / 2, detailTextY, windTitle);
+
+  char windVal[24];
+  snprintf(windVal, sizeof(windVal), "%.1f km/h", weather.windSpeed);
+  tw = renderer.getTextWidth(UI_10_FONT_ID, windVal);
+  renderer.drawText(UI_10_FONT_ID, cardMargin + colW + (colW - tw) / 2, detailTextY + 24, windVal, true,
+                    EpdFontFamily::BOLD);
+
+  curY += cardH + 20;
+
+  // 7. Multi-day Forecast Card
+  if (forecastCount > 0) {
+    const int fCardH = 124;
+    renderer.drawRoundedRect(cardMargin, curY, cardW, fCardH, 1, 8, true);
+
+    const int cols = forecastCount;
+    const int fCellW = cardW / cols;
+    const int fY = curY + 10;
+
+    for (int i = 0; i < cols; i++) {
+      const auto& f = forecast[i];
+      const int cx = cardMargin + i * fCellW + fCellW / 2;
+
+      tw = renderer.getTextWidth(SMALL_FONT_ID, f.dayLabel);
+      renderer.drawText(SMALL_FONT_ID, cx - tw / 2, fY, f.dayLabel, true, EpdFontFamily::BOLD);
+
+      const uint8_t* fIcon = getWeatherIcon(f.weatherCode);
+      drawWeatherIcon32(renderer, fIcon, cx - 16, fY + 22);
+
+      char highBuf[12];
+      snprintf(highBuf, sizeof(highBuf), "%.0f°", WeatherCache::convertTemp(f.tempMax, unit));
+      tw = renderer.getTextWidth(SMALL_FONT_ID, highBuf);
+      renderer.drawText(SMALL_FONT_ID, cx - tw / 2, fY + 60, highBuf, true, EpdFontFamily::BOLD);
+
+      char lowBuf[12];
+      snprintf(lowBuf, sizeof(lowBuf), "%.0f°", WeatherCache::convertTemp(f.tempMin, unit));
+      tw = renderer.getTextWidth(SMALL_FONT_ID, lowBuf);
+      renderer.drawText(SMALL_FONT_ID, cx - tw / 2, fY + 78, lowBuf);
+    }
+  }
+
+  // 8. Footer: Last updated
+  if (updateTime[0]) {
+    char updatedBuf[48];
+    snprintf(updatedBuf, sizeof(updatedBuf), "%s: %s", tr(STR_LAST_UPDATED), updateTime);
+    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 20, updatedBuf);
+  }
+
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
