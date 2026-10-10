@@ -588,7 +588,8 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
 // Four edge gesture entries are compiled only for touch devices.
-inline constexpr size_t BASE_SETTINGS_CAPACITY = 104 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+// The non-touch count is 105; the reserve must cover the largest build.
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 105 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 
 const std::vector<SettingInfo>& getBaseSettingsList();
 
