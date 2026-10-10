@@ -64,6 +64,7 @@ constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER[] = {
     static_cast<uint8_t>(CrossPointSettings::DASHBOARD_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::LUNAR_CALENDAR_SLEEP),
     static_cast<uint8_t>(CrossPointSettings::WEATHER_SLEEP),
+    static_cast<uint8_t>(CrossPointSettings::CALENDAR_SLEEP),
 };
 constexpr uint8_t SLEEP_SCREEN_STORAGE_ORDER_COUNT =
     sizeof(SLEEP_SCREEN_STORAGE_ORDER) / sizeof(SLEEP_SCREEN_STORAGE_ORDER[0]);
@@ -1272,6 +1273,7 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
   constexpr uint8_t dashboardSleepStorageValue = 11;
   constexpr uint8_t lunarCalendarStorageValue = 12;
   constexpr uint8_t weatherStorageValue = 13;
+  constexpr uint8_t calendarSleepStorageValue = 14;
   for (uint8_t storedValue = 0; storedValue < legacyModeCountBeforeMinimal; storedValue++) {
     if (sleepScreenStorageToMode(storedValue) != storedValue) {
       return false;
@@ -1289,7 +1291,10 @@ bool CrossPointSettings::verifySleepScreenMigrationContract() {
          sleepScreenStorageToMode(lunarCalendarStorageValue) == LUNAR_CALENDAR_SLEEP &&
          sleepScreenModeToStorage(LUNAR_CALENDAR_SLEEP) == lunarCalendarStorageValue &&
          sleepScreenStorageToMode(weatherStorageValue) == WEATHER_SLEEP &&
-         sleepScreenModeToStorage(WEATHER_SLEEP) == weatherStorageValue && sleepScreenStorageToMode(UINT8_MAX) == DARK;
+         sleepScreenModeToStorage(WEATHER_SLEEP) == weatherStorageValue &&
+         sleepScreenStorageToMode(calendarSleepStorageValue) == CALENDAR_SLEEP &&
+         sleepScreenModeToStorage(CALENDAR_SLEEP) == calendarSleepStorageValue &&
+         sleepScreenStorageToMode(UINT8_MAX) == DARK;
 }
 #endif
 

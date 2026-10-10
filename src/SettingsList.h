@@ -335,7 +335,8 @@ inline SettingInfo buildSleepScreenSetting() {
                         {StrId::STR_NONE_OPT, StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER,
                          StrId::STR_COVER_CUSTOM, StrId::STR_PAGE_OVERLAY, StrId::STR_READING_STATS,
                          StrId::STR_THEME_MINIMAL, StrId::STR_THEME_MINIMAL_STATS, StrId::STR_THEME_DASHBOARD,
-                         StrId::STR_LUNAR_CALENDAR_SLEEP, StrId::STR_WEATHER_SLEEP, StrId::STR_QUICK_RESUME},
+                         StrId::STR_LUNAR_CALENDAR_SLEEP, StrId::STR_WEATHER_SLEEP, StrId::STR_SLEEP_SCREEN_CALENDAR,
+                         StrId::STR_QUICK_RESUME},
                         "sleepScreen", StrId::STR_CAT_DISPLAY);
   s.withEnumRawValues({
       static_cast<uint8_t>(CrossPointSettings::BLANK),
@@ -351,6 +352,7 @@ inline SettingInfo buildSleepScreenSetting() {
       static_cast<uint8_t>(CrossPointSettings::DASHBOARD_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::LUNAR_CALENDAR_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::WEATHER_SLEEP),
+      static_cast<uint8_t>(CrossPointSettings::CALENDAR_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
   });
   return s;
@@ -589,7 +591,8 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
 // Four edge gesture entries are compiled only for touch devices.
-inline constexpr size_t BASE_SETTINGS_CAPACITY = 104 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+// The non-touch count is 105; the reserve must cover the largest build.
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 105 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 
 const std::vector<SettingInfo>& getBaseSettingsList();
 

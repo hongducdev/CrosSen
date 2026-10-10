@@ -8,10 +8,11 @@
 - Add a **Weather** sleep screen showing the current temperature, condition text and icon, feels-like, humidity, wind speed, a five-day forecast row and the time the data was last updated. It renders from the SD card cache, so it never opens Wi-Fi while sleeping.
 - Add **Settings → System → Device → Sync Weather**, which connects to Wi-Fi when needed, detects the location, downloads the forecast from Open-Meteo and caches it for the Weather sleep screen.
 - Add a **Temperature Unit** display setting to switch weather values between Celsius and Fahrenheit.
+- Add a Calendar Block sleep screen that prints the day as a page of a Vietnamese tear-off calendar: the solar day in oversized digits, the month banner, the weekday, the lunar date with its can-chi pillars and auspicious hours, the day's holiday when there is one, and a quote about books. It shows no clock, because a sleep screen is painted once and then stays on the panel.
 
 ### Fixed
 
-- Fix the lunar calendar engine mis-assigning the Vietnamese 2023 leap month to tháng Giêng instead of tháng Hai (leap month 2, 22/03–19/04/2023). Replace the abridged Ho Ngoc Duc 13-term new-moon series with the full Jean Meeus Table 49.A (25 periodic terms, E eccentricity factor, Omega node term), improving new-moon accuracy from ~8 minutes to ~1.6 minutes worst-case. Also correct the unit test that had locked in the engine’s wrong values.
+- Fix the lunar calendar engine mis-assigning the Vietnamese 2023 leap month to tháng Giêng instead of tháng Hai (leap month 2, 22/03–19/04/2023). The abridged Ho Ngoc Duc 13-term new-moon series was replaced with the full Jean Meeus Table 49.A (25 periodic terms, E eccentricity factor, Omega node term), improving new-moon accuracy from ~8 minutes to ~1.6 minutes worst-case, and the unit test that had locked in the engine's wrong values now asserts the published 2023 leap-month dates. Both sleep screens share this one engine, so the Calendar Block page prints the correct lunar date too.
 
 ## [v1.6.1] - 2026-10-03
 
