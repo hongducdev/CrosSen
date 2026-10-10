@@ -132,18 +132,9 @@ const char* lunarHoliday(const uint8_t lunarMonth, const uint8_t lunarDay) {
 }
 
 const char* weekdayName(const uint8_t weekdayIndex) {
-  static constexpr StrId kWeekdays[7] = {StrId::STR_WEEKDAY_MON, StrId::STR_WEEKDAY_TUE, StrId::STR_WEEKDAY_WED,
-                                         StrId::STR_WEEKDAY_THU, StrId::STR_WEEKDAY_FRI, StrId::STR_WEEKDAY_SAT,
-                                         StrId::STR_WEEKDAY_SUN};
-  return I18N.get(kWeekdays[weekdayIndex % 7]);
-}
-
-const char* solarMonthName(const uint8_t month) {
-  static constexpr StrId kMonthNames[12] = {StrId::STR_MONTH_JAN, StrId::STR_MONTH_FEB, StrId::STR_MONTH_MAR,
-                                            StrId::STR_MONTH_APR, StrId::STR_MONTH_MAY, StrId::STR_MONTH_JUN,
-                                            StrId::STR_MONTH_JUL, StrId::STR_MONTH_AUG, StrId::STR_MONTH_SEP,
-                                            StrId::STR_MONTH_OCT, StrId::STR_MONTH_NOV, StrId::STR_MONTH_DEC};
-  return I18N.get(kMonthNames[(month - 1) % 12]);
+  static constexpr const char* kWeekdays[7] = {"Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm",
+                                               "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"};
+  return kWeekdays[weekdayIndex % 7];
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +179,28 @@ void drawHeroDay(const GfxRenderer& renderer, const int centerX, const int top, 
     if (digit >= 0 && digit <= 9) totalWidth += CalendarDigitWidths[digit];
   }
 
-  int x = centerX - totalWidth / 2;
+  // Draw pixel-by-pixel via renderer.drawPixel() so that GfxRenderer::rotateCoordinates()
+  // rotates the glyphs to match the screen's logical orientation (portrait/landscape).
+  // renderer.drawImage() lacks bit-rotation (TODO in GfxRenderer.cpp) and draws raw
+  // panel-oriented rows, which left the digits rotated 90 degrees sideways in portrait mode.
+  int startX = centerX - totalWidth / 2;
   for (int i = 0; i < count; i++) {
     const int digit = digits[i] - '0';
     if (digit < 0 || digit > 9) continue;
-    renderer.drawImage(CalendarDigits[digit], x, top, CalendarDigitWidths[digit], CalendarDigitHeight);
-    x += CalendarDigitWidths[digit] + kHeroDigitGap;
+    const int w = CalendarDigitWidths[digit];
+    const int stride = (w + 7) / 8;
+    const uint8_t* bmp = CalendarDigits[digit];
+    for (int r = 0; r < CalendarDigitHeight; r++) {
+      const int py = top + r;
+      for (int c = 0; c < w; c++) {
+        const uint8_t byte = bmp[r * stride + (c / 8)];
+        const bool isWhite = (byte >> (7 - (c % 8))) & 1;
+        if (!isWhite) {
+          renderer.drawPixel(startX + c, py, true);
+        }
+      }
+    }
+    startX += w + kHeroDigitGap;
   }
 }
 
@@ -227,19 +234,19 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   renderer.drawRect(cardX, cardY, cardWidth, cardHeight, 1, true);
   renderer.drawRect(cardX + 4, cardY + 4, cardWidth - 8, cardHeight - 8, 1, true);
 
-  // --- Content strings -----------------------------------------------------
+  // --- Content strings (100% tiếng Việt cho lịch bloc) --------------------
   char banner[64];
-  std::snprintf(banner, sizeof(banner), "%s  ·  %u", solarMonthName(month), static_cast<unsigned>(year));
+  std::snprintf(banner, sizeof(banner), "Tháng %u  ·  %u", static_cast<unsigned>(month), static_cast<unsigned>(year));
 
   const char* festiveDayName = CalendarAlmanac::lunarDayName(lunar.day);
   const char* lunarMonthName = CalendarAlmanac::lunarMonthName(lunar.month);
-  const char* leapSuffix = lunar.isLeapMonth ? tr(STR_CALENDAR_LUNAR_LEAP) : "";
+  const char* leapSuffix = lunar.isLeapMonth ? " (nhuận)" : "";
   char lunarTitle[128];
   if (festiveDayName != nullptr) {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %s  ·  %s%s", tr(STR_CALENDAR_LUNAR), festiveDayName,
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: %s  ·  %s%s", festiveDayName,
                   lunarMonthName, leapSuffix);
   } else {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %d %s%s", tr(STR_CALENDAR_LUNAR), lunar.day, lunarMonthName,
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: Ngày %d  ·  %s%s", lunar.day, lunarMonthName,
                   leapSuffix);
   }
 
@@ -251,17 +258,16 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   formatCanChi(getCanChiDay(day, month, year), dayCanChi, sizeof(dayCanChi));
 
   char pillarYear[64];
-  std::snprintf(pillarYear, sizeof(pillarYear), "%s %s", tr(STR_CALENDAR_YEAR), yearCanChi);
+  std::snprintf(pillarYear, sizeof(pillarYear), "Năm %s", yearCanChi);
   char pillarMonthDay[96];
-  std::snprintf(pillarMonthDay, sizeof(pillarMonthDay), "%s %s  ·  %s %s", tr(STR_CALENDAR_MONTH), monthCanChi,
-                tr(STR_CALENDAR_DAY), dayCanChi);
+  std::snprintf(pillarMonthDay, sizeof(pillarMonthDay), "Tháng %s  ·  Ngày %s", monthCanChi, dayCanChi);
 
   // The day pillar and the auspicious hours both follow the civil day's branch.
   int dayBranch = (julianDay + 1) % 12;
   if (dayBranch < 0) dayBranch += 12;
   const uint8_t* auspicious = CalendarAlmanac::auspiciousHours(dayBranch);
   char hoursLine[96];
-  std::snprintf(hoursLine, sizeof(hoursLine), "%s: %s, %s, %s, %s, %s, %s", tr(STR_CALENDAR_AUSPICIOUS_HOURS),
+  std::snprintf(hoursLine, sizeof(hoursLine), "Giờ hoàng đạo: %s, %s, %s, %s, %s, %s",
                 CalendarAlmanac::branchName(auspicious[0]), CalendarAlmanac::branchName(auspicious[1]),
                 CalendarAlmanac::branchName(auspicious[2]), CalendarAlmanac::branchName(auspicious[3]),
                 CalendarAlmanac::branchName(auspicious[4]), CalendarAlmanac::branchName(auspicious[5]));
@@ -301,7 +307,7 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   y += kRuleGap + kHeroGapAbove;
   drawHeroDay(renderer, centerX, y, day);
   y += CalendarDigitHeight + kHeroCaptionGap;
-  drawCentered(renderer, SMALL_FONT_ID, centerX, y, tr(STR_CALENDAR_SOLAR), true);
+  drawCentered(renderer, SMALL_FONT_ID, centerX, y, "Dương lịch", true);
   const int mastheadBottom = y + smallHeight;
 
   // --- Footer, anchored to the card bottom --------------------------------
