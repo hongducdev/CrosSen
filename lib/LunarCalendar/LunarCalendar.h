@@ -1,73 +1,67 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
-// Vietnamese lunar calendar (âm lịch) conversion.
-//
-// The conversion follows the astronomical algorithm published by Hồ Ngọc Đức
-// (https://www.informatik.uni-leipzig.de/~duc/amlich/), which is also what the
-// Vietnamese lunar calendars in common use are built on:
-//   * new moon instants from the Meeus/Chapront series,
-//   * solar longitude stops (the 12 "trung khí") define month boundaries,
-//   * UTC+7 (Vietnam) decides which civil day a new moon belongs to.
-//
-// Everything is computed on demand from the date; there is no lookup table, so
-// supporting any year costs no flash. The maths is a few dozen sin() calls, run
-// once per sleep screen render.
-namespace LunarCalendar {
-
-// Vietnam Standard Time. The lunar day rolls over at local midnight, so the
-// caller should pass the device's configured offset when it differs.
-constexpr float kVietnamTimeZoneHours = 7.0f;
+/**
+ * Vietnamese Lunar Calendar (Âm lịch) utility.
+ * Based on Ho Ngoc Duc's astronomical algorithm for UTC+7
+ * (https://www.informatik.uni-leipzig.de/~duc/amlich/)
+ *
+ * Provides:
+ * - Solar to Lunar date conversion with leap month handling
+ * - Can-Chi (Thiên Can, Địa Chi) for Year, Month, Day
+ * - 24 Solar terms (Tiết khí)
+ * - Major Vietnamese cultural and national holiday detection
+ *
+ * Designed for embedded systems: zero heap allocation, constant flash tables.
+ */
 
 struct LunarDate {
-  uint8_t day = 1;        // 1..30
-  uint8_t month = 1;      // 1..12
-  uint16_t year = 2000;   // lunar year (the year of Tết, not the solar year)
-  bool leap = false;      // true when this month is the intercalary ("nhuận") month
-  uint8_t dayStem = 0;    // 0..9  (Giáp..Quý) for the civil day's can-chi
-  uint8_t dayBranch = 0;  // 0..11 (Tý..Hợi) for the civil day's can-chi
+  int day = 1;
+  int month = 1;
+  int year = 2026;
+  bool isLeapMonth = false;
 };
 
-// Gregorian calendar validity, including leap years.
-bool isValidSolarDate(uint16_t year, uint8_t month, uint8_t day);
+struct CanChi {
+  const char* can = "";
+  const char* chi = "";
+};
 
-// Days in a Gregorian month, or 0 when the month is out of range.
-uint8_t daysInMonth(uint16_t year, uint8_t month);
+// Convert a Gregorian date to Vietnamese lunar date.
+// timeZone: UTC offset in hours (Vietnam / ICT = 7.0)
+LunarDate solarToLunar(int day, int month, int year, double timeZone = 7.0);
 
-// Day of week where 0 is Monday and 6 is Sunday.
-uint8_t weekdayIndex(uint16_t year, uint8_t month, uint8_t day);
+// Julian Day Number from Gregorian date
+double jdFromGregorian(int day, int month, int year);
 
-// Julian day number for a Gregorian date (proleptic Gregorian calendar).
-int32_t julianDayNumber(uint16_t year, uint8_t month, uint8_t day);
+// Can-Chi getters (pure static strings, zero allocation)
+CanChi getCanChiYear(int lunarYear);
+CanChi getCanChiMonth(int lunarMonth, int lunarYear);
+CanChi getCanChiDay(int day, int month, int year);
 
-// Convert a Gregorian date to its Vietnamese lunar date. Returns false and
-// leaves `out` untouched when the input is not a valid date or the year is
-// outside the range the lunar series is trustworthy for.
-bool fromSolarDate(uint16_t year, uint8_t month, uint8_t day, LunarDate& out,
-                   float timeZoneHours = kVietnamTimeZoneHours);
+// Format Can-Chi into a destination buffer, e.g. "Bính Ngọ", "Giáp Thân"
+void formatCanChi(const CanChi& cc, char* buf, size_t bufSize);
 
-// Can-chi of the lunar year and month the given lunar month belongs to.
-void yearStemBranch(uint16_t lunarYear, uint8_t& stem, uint8_t& branch);
-void monthStemBranch(uint16_t lunarYear, uint8_t lunarMonth, uint8_t& stem, uint8_t& branch);
+// Returns the name of the active 24 solar terms (Tiết khí)
+const char* getSolarTermName(int day, int month, int year, double timeZone = 7.0);
 
-// "Giáp", "Ất", ... and "Tý", "Sửu", ...
-const char* stemName(uint8_t stem);
-const char* branchName(uint8_t branch);
+// Returns a notable Vietnamese holiday if present, or nullptr
+const char* getVietnameseHoliday(int solarDay, int solarMonth, const LunarDate& lunar);
 
-// "tháng Giêng", "tháng Hai", ... "tháng Chạp".
-const char* lunarMonthName(uint8_t lunarMonth);
+// Returns true if the lunar month has 30 days (tháng đủ), false for 29 days (tháng thiếu)
+bool isLunarMonthLong(int lunarMonth, int lunarYear, bool isLeap = false, double timeZone = 7.0);
 
-// "Mùng một" / "Rằm" for the two festive days of a lunar month, else nullptr.
-const char* lunarDayName(uint8_t lunarDay);
+// ── Gregorian helpers (timezone-free, no mktime/localtime) ──────────────────
 
-// The six auspicious hours ("giờ hoàng đạo") of a day whose branch is
-// `dayBranch`, as branch indices into branchName().
-const uint8_t* auspiciousHours(uint8_t dayBranch);
+// Days in a Gregorian month, accounting for leap years.
+int gregorianDaysInMonth(int month, int year);
 
-// Upper bound of the lunar series we trust; older dates still convert but the
-// Vietnamese calendar's official rules only cover the modern era.
-constexpr uint16_t kMinSupportedYear = 1800;
-constexpr uint16_t kMaxSupportedYear = 2199;
+// Day of week for a Gregorian date: 0 = Sunday .. 6 = Saturday.
+int gregorianWeekday(int day, int month, int year);
 
-}  // namespace LunarCalendar
+// Shift a civil date/time by a signed number of minutes, rolling the date over
+// local midnight. Used to turn the RTC's UTC reading into local wall-clock time
+// without depending on the platform's timezone database.
+void shiftCivilMinutes(int& year, int& month, int& day, int& hour, int& minute, long deltaMinutes);

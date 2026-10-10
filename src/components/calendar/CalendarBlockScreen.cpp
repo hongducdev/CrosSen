@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "CalendarAlmanac.h"
 #include "CrossPointSettings.h"
 #include "fontIds.h"
 #include "images/CalendarDigits.h"
@@ -73,16 +74,9 @@ constexpr FixedHoliday kSolarHolidays[] = {
 
 // Lunar-calendar observances.
 constexpr FixedHoliday kLunarHolidays[] = {
-    {1, 1, "Tết Nguyên Đán"},
-    {15, 1, "Rằm tháng Giêng"},
-    {3, 3, "Tết Hàn Thực"},
-    {10, 3, "Giỗ Tổ Hùng Vương"},
-    {15, 4, "Lễ Phật Đản"},
-    {5, 5, "Tết Đoan Ngọ"},
-    {15, 7, "Lễ Vu Lan"},
-    {15, 8, "Tết Trung Thu"},
-    {23, 12, "Ông Táo về trời"},
-    {15, 12, "Rằm tháng Chạp"},
+    {1, 1, "Tết Nguyên Đán"},    {15, 1, "Rằm tháng Giêng"}, {3, 3, "Tết Hàn Thực"}, {10, 3, "Giỗ Tổ Hùng Vương"},
+    {15, 4, "Lễ Phật Đản"},      {5, 5, "Tết Đoan Ngọ"},     {15, 7, "Lễ Vu Lan"},   {15, 8, "Tết Trung Thu"},
+    {23, 12, "Ông Táo về trời"}, {15, 12, "Rằm tháng Chạp"},
 };
 
 // ---------------------------------------------------------------------------
@@ -94,9 +88,9 @@ constexpr FixedHoliday kLunarHolidays[] = {
 // and wherever the weekday and the last day of the month land.
 // ---------------------------------------------------------------------------
 
-constexpr int kCardInset = 18;     // card edge to page edge
-constexpr int kCardPadding = 20;   // card edge to content
-constexpr int kTopPadding = 24;    // card edge to the first band
+constexpr int kCardInset = 18;    // card edge to page edge
+constexpr int kCardPadding = 20;  // card edge to content
+constexpr int kTopPadding = 24;   // card edge to the first band
 constexpr int kBannerHeight = 46;
 constexpr int kBandGap = 20;       // vertical rhythm between bands
 constexpr int kRuleGap = 7;        // the two hairlines of a double rule
@@ -113,10 +107,15 @@ constexpr int kFooterBottom = 18;
 
 constexpr int kHeroDigitGap = 10;  // space between two day digits
 
+// The lunar series is only plotted inside this window: an unset RTC can report a
+// far-out date, and the page would then print an invented lunar date.
+constexpr uint16_t kMinSolarYear = 1900;
+constexpr uint16_t kMaxSolarYear = 2100;
+
 void shiftDay(uint16_t& year, uint8_t& month, uint8_t& day, const int delta) {
   if (delta == 0) return;
   if (delta > 0) {
-    if (day < LunarCalendar::daysInMonth(year, month)) {
+    if (static_cast<int>(day) < gregorianDaysInMonth(month, year)) {
       day++;
       return;
     }
@@ -139,7 +138,7 @@ void shiftDay(uint16_t& year, uint8_t& month, uint8_t& day, const int delta) {
   } else {
     month--;
   }
-  day = LunarCalendar::daysInMonth(year, month);
+  day = static_cast<uint8_t>(gregorianDaysInMonth(month, year));
 }
 
 // The RTC keeps UTC; the printed page must show the wall-clock day, which rolls
@@ -162,7 +161,8 @@ bool localDate(uint16_t& year, uint8_t& month, uint8_t& day) {
   month = utcMonth;
   day = utcDay;
   shiftDay(year, month, day, dayDelta);
-  return LunarCalendar::isValidSolarDate(year, month, day);
+  if (month < 1 || month > 12) return false;
+  return day >= 1 && static_cast<int>(day) <= gregorianDaysInMonth(month, year);
 }
 
 float configuredTimeZoneHours() {
@@ -260,11 +260,12 @@ bool draw(const GfxRenderer& renderer) {
   if (!localDate(year, month, day)) {
     return false;
   }
-
-  LunarCalendar::LunarDate lunar;
-  if (!LunarCalendar::fromSolarDate(year, month, day, lunar, configuredTimeZoneHours())) {
+  if (year < kMinSolarYear || year > kMaxSolarYear) {
     return false;
   }
+
+  const LunarDate lunar = solarToLunar(day, month, year, configuredTimeZoneHours());
+  const int julianDay = static_cast<int>(jdFromGregorian(day, month, year));
 
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
@@ -288,46 +289,49 @@ bool draw(const GfxRenderer& renderer) {
   char banner[64];
   std::snprintf(banner, sizeof(banner), "%s  ·  %u", solarMonthName(month), static_cast<unsigned>(year));
 
-  const char* lunarDayName = LunarCalendar::lunarDayName(lunar.day);
-  const char* lunarMonthName = LunarCalendar::lunarMonthName(lunar.month);
-  const char* leapSuffix = lunar.leap ? tr(STR_CALENDAR_LUNAR_LEAP) : "";
+  const char* festiveDayName = CalendarAlmanac::lunarDayName(lunar.day);
+  const char* lunarMonthName = CalendarAlmanac::lunarMonthName(lunar.month);
+  const char* leapSuffix = lunar.isLeapMonth ? tr(STR_CALENDAR_LUNAR_LEAP) : "";
   char lunarTitle[128];
-  if (lunarDayName != nullptr) {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %s  ·  %s%s", tr(STR_CALENDAR_LUNAR), lunarDayName,
+  if (festiveDayName != nullptr) {
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %s  ·  %s%s", tr(STR_CALENDAR_LUNAR), festiveDayName,
                   lunarMonthName, leapSuffix);
   } else {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %u %s%s", tr(STR_CALENDAR_LUNAR),
-                  static_cast<unsigned>(lunar.day), lunarMonthName, leapSuffix);
+    std::snprintf(lunarTitle, sizeof(lunarTitle), "%s: %d %s%s", tr(STR_CALENDAR_LUNAR), lunar.day, lunarMonthName,
+                  leapSuffix);
   }
 
-  uint8_t yearStem = 0;
-  uint8_t yearBranch = 0;
-  LunarCalendar::yearStemBranch(lunar.year, yearStem, yearBranch);
-  uint8_t monthStem = 0;
-  uint8_t monthBranch = 0;
-  LunarCalendar::monthStemBranch(lunar.year, lunar.month, monthStem, monthBranch);
+  char yearCanChi[24];
+  formatCanChi(getCanChiYear(lunar.year), yearCanChi, sizeof(yearCanChi));
+  char monthCanChi[24];
+  formatCanChi(getCanChiMonth(lunar.month, lunar.year), monthCanChi, sizeof(monthCanChi));
+  char dayCanChi[24];
+  formatCanChi(getCanChiDay(day, month, year), dayCanChi, sizeof(dayCanChi));
 
   char pillarYear[64];
-  std::snprintf(pillarYear, sizeof(pillarYear), "%s %s %s", tr(STR_CALENDAR_YEAR),
-                LunarCalendar::stemName(yearStem), LunarCalendar::branchName(yearBranch));
-  char pillarMonthDay[80];
-  std::snprintf(pillarMonthDay, sizeof(pillarMonthDay), "%s %s %s  ·  %s %s %s", tr(STR_CALENDAR_MONTH),
-                LunarCalendar::stemName(monthStem), LunarCalendar::branchName(monthBranch), tr(STR_CALENDAR_DAY),
-                LunarCalendar::stemName(lunar.dayStem), LunarCalendar::branchName(lunar.dayBranch));
+  std::snprintf(pillarYear, sizeof(pillarYear), "%s %s", tr(STR_CALENDAR_YEAR), yearCanChi);
+  char pillarMonthDay[96];
+  std::snprintf(pillarMonthDay, sizeof(pillarMonthDay), "%s %s  ·  %s %s", tr(STR_CALENDAR_MONTH), monthCanChi,
+                tr(STR_CALENDAR_DAY), dayCanChi);
 
-  const uint8_t* auspicious = LunarCalendar::auspiciousHours(lunar.dayBranch);
+  // The day pillar and the auspicious hours both follow the civil day's branch.
+  int dayBranch = (julianDay + 1) % 12;
+  if (dayBranch < 0) dayBranch += 12;
+  const uint8_t* auspicious = CalendarAlmanac::auspiciousHours(dayBranch);
   char hoursLine[96];
   std::snprintf(hoursLine, sizeof(hoursLine), "%s: %s, %s, %s, %s, %s, %s", tr(STR_CALENDAR_AUSPICIOUS_HOURS),
-                LunarCalendar::branchName(auspicious[0]), LunarCalendar::branchName(auspicious[1]),
-                LunarCalendar::branchName(auspicious[2]), LunarCalendar::branchName(auspicious[3]),
-                LunarCalendar::branchName(auspicious[4]), LunarCalendar::branchName(auspicious[5]));
+                CalendarAlmanac::branchName(auspicious[0]), CalendarAlmanac::branchName(auspicious[1]),
+                CalendarAlmanac::branchName(auspicious[2]), CalendarAlmanac::branchName(auspicious[3]),
+                CalendarAlmanac::branchName(auspicious[4]), CalendarAlmanac::branchName(auspicious[5]));
 
   const char* holiday = lunarHoliday(lunar.month, lunar.day);
   if (holiday == nullptr) {
     holiday = solarHoliday(month, day);
   }
 
-  const BookQuote& quote = kQuotes[LunarCalendar::julianDayNumber(year, month, day) % kQuoteCount];
+  const int quoteCount = static_cast<int>(kQuoteCount);
+  const int quoteIndex = ((julianDay % quoteCount) + quoteCount) % quoteCount;
+  const BookQuote& quote = kQuotes[quoteIndex];
   const std::vector<std::string> quoteLines = renderer.wrappedText(UI_12_FONT_ID, quote.text, contentWidth, 3);
   const std::vector<std::string> hoursLines = renderer.wrappedText(UI_10_FONT_ID, hoursLine, contentWidth, 2);
 
@@ -341,12 +345,14 @@ bool draw(const GfxRenderer& renderer) {
   int y = cardY + kTopPadding;
 
   renderer.fillRect(contentX, y, contentWidth, kBannerHeight, true);
-  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y + (kBannerHeight - titleLineHeight) / 2, contentWidth,
-                     banner, false, EpdFontFamily::BOLD);
+  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y + (kBannerHeight - titleLineHeight) / 2, contentWidth, banner,
+                     false, EpdFontFamily::BOLD);
   y += kBannerHeight + kBandGap;
 
-  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y, contentWidth,
-                     weekdayName(LunarCalendar::weekdayIndex(year, month, day)), true, EpdFontFamily::BOLD);
+  // gregorianWeekday() counts from Sunday; the page lists Monday first.
+  const int weekday = (gregorianWeekday(day, month, year) + 6) % 7;
+  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y, contentWidth, weekdayName(weekday), true,
+                     EpdFontFamily::BOLD);
   y += renderer.getLineHeight(UI_12_FONT_ID) + kWeekdayGap;
   drawDoubleRule(renderer, contentX, y, contentWidth);
 
@@ -409,8 +415,7 @@ bool draw(const GfxRenderer& renderer) {
 
   char author[64];
   std::snprintf(author, sizeof(author), "— %s", quote.author);
-  const std::string fittedAuthor =
-      renderer.truncatedText(UI_10_FONT_ID, author, contentWidth, EpdFontFamily::ITALIC);
+  const std::string fittedAuthor = renderer.truncatedText(UI_10_FONT_ID, author, contentWidth, EpdFontFamily::ITALIC);
   const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, fittedAuthor.c_str(), EpdFontFamily::ITALIC);
   renderer.drawText(UI_10_FONT_ID, cardRight - kCardPadding - authorWidth, fy, fittedAuthor.c_str(), true,
                     EpdFontFamily::ITALIC);

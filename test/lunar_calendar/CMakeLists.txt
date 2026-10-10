@@ -1,9 +1,19 @@
 cmake_minimum_required(VERSION 3.16)
 project(LunarCalendar LANGUAGES CXX)
 enable_testing()
+
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-add_executable(lunar_calendar LunarCalendarTest.cpp ${REPO_ROOT}/lib/LunarCalendar/LunarCalendar.cpp)
-target_include_directories(lunar_calendar PRIVATE ${REPO_ROOT}/lib ${REPO_ROOT}/lib/LunarCalendar)
-target_compile_features(lunar_calendar PRIVATE cxx_std_17)
-target_compile_options(lunar_calendar PRIVATE -Wall -Wextra -pedantic -UNDEBUG)
+
+add_executable(lunar_calendar
+  LunarCalendarTest.cpp
+  ${REPO_ROOT}/lib/LunarCalendar/LunarCalendar.cpp
+)
+
+target_include_directories(lunar_calendar PRIVATE
+  ${REPO_ROOT}/lib/LunarCalendar
+)
+
+target_compile_features(lunar_calendar PRIVATE cxx_std_20)
+target_compile_options(lunar_calendar PRIVATE -UNDEBUG)
+
 add_test(NAME lunar_calendar COMMAND lunar_calendar)
