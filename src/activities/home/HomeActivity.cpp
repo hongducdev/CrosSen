@@ -279,6 +279,7 @@ HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats,
   }
 
   items.push({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
+  items.push({tr(STR_SETTINGS_TITLE), Settings, HomeMenuAction::Settings});
   return items;
 }
 
@@ -1508,7 +1509,9 @@ void HomeActivity::loop() {
             onFileTransferOpen();
             break;
           case HomeMenuAction::ContinueReading:
+            break;
           case HomeMenuAction::Settings:
+            onSettingsOpen();
             break;
         }
       };
@@ -1738,7 +1741,9 @@ void HomeActivity::loop() {
             onFileTransferOpen();
             break;
           case HomeMenuAction::ContinueReading:
+            break;
           case HomeMenuAction::Settings:
+            onSettingsOpen();
             break;
         }
       };
@@ -1844,8 +1849,10 @@ void HomeActivity::loop() {
       requestUpdate();
       return;
     }
-    if (releasedFrontButton == HalGPIO::BTN_RIGHT || releasedFrontButton == HalGPIO::BTN_CONFIRM ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    const bool confirmTriggered =
+        releasedFrontButton == HalGPIO::BTN_CONFIRM || mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        (!isQuartumTheme() && releasedFrontButton == HalGPIO::BTN_RIGHT);
+    if (confirmTriggered) {
       openSelectedBook();
       return;
     }
