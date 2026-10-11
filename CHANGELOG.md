@@ -12,6 +12,9 @@
 
 ### Fixed
 
+- Fix Quartum 4-cover home navigation auto-opening the highlighted book when releasing the Right button; Left and Right now navigate the cover grid while Confirm opens the book.
+- Add Settings to the pop-up menu of Minuta home themes (Quartum and Solum).
+- Rebalance vertical spacing and remove redundant labels on the Lunar Calendar and Calendar Block sleep screens.
 - Fix the lunar calendar engine mis-assigning the Vietnamese 2023 leap month to tháng Giêng instead of tháng Hai (leap month 2, 22/03–19/04/2023). The abridged Ho Ngoc Duc 13-term new-moon series was replaced with the full Jean Meeus Table 49.A (25 periodic terms, E eccentricity factor, Omega node term), improving new-moon accuracy from ~8 minutes to ~1.6 minutes worst-case, and the unit test that had locked in the engine's wrong values now asserts the published 2023 leap-month dates. Both sleep screens share this one engine, so the Calendar Block page prints the correct lunar date too.
 
 ## [v1.6.1] - 2026-10-03
