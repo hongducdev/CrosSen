@@ -3,7 +3,7 @@ title: Sleep Calendar Spacing and Cleanup
 description: >-
   Cân đối khoảng cách màn hình ngủ lịch âm và lịch bloc, bỏ nhãn thừa và chuẩn
   hoá định dạng ngày tháng
-status: pending
+status: completed
 priority: P2
 branch: goal/sua-giup-toi-khoang-cach-giua-cu-20261011-1205
 tags:
@@ -39,8 +39,8 @@ Kế hoạch tái cấu trúc bố cục và tinh chỉnh giao diện cho hai m�
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [audit-and-layout-design](./phase-01-audit-and-layout-design.md) | Completed |
-| 2 | [implementation](./phase-02-implementation.md) | Pending |
-| 3 | [verification](./phase-03-verification.md) | Pending |
+| 2 | [implementation](./phase-02-implementation.md) | Completed |
+| 3 | [verification](./phase-03-verification.md) | Completed |
 
 ## Dependencies
 - Màn hình e-ink 480x800 1-bit, font UI_12, UI_10, SMALL, LexendDeca_16, CalendarDigits bmp (160px).

@@ -1483,7 +1483,7 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
   char solarDateBuf[64];
   snprintf(solarDateBuf, sizeof(solarDateBuf), "%s, %02d/%02d/%d", I18N.get(DAY_NAMES[timeinfo.tm_wday % 7]), solarDay,
            solarMonth, solarYear);
-  renderer.drawCenteredText(UI_10_FONT_ID, 38, solarDateBuf);
+  renderer.drawCenteredText(UI_10_FONT_ID, 42, solarDateBuf);
 
   // 7-segment digital time (HH:MM)
   constexpr int DW = 36;
@@ -1492,7 +1492,7 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
   constexpr int CW = 16;
   const int clockW = 4 * DW + 2 * DGAP + CW;
   const int clockX = (pageWidth - clockW) / 2;
-  const int clockY = 66;
+  const int clockY = 70;
 
   const int h0 = timeinfo.tm_hour / 10, h1 = timeinfo.tm_hour % 10;
   const int m0 = timeinfo.tm_min / 10, m1 = timeinfo.tm_min % 10;
@@ -1518,20 +1518,19 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
   // Hero Card: Lunar Info
   const int cardMargin = 16;
   const int cardW = pageWidth - cardMargin * 2;
-  const int heroCardY = 134;
-  const int heroCardH = 146;
+  const int heroCardY = 142;
+  const int heroCardH = 144;
   renderer.drawRoundedRect(cardMargin, heroCardY, cardW, heroCardH, 1, 8, true);
 
-  // Left col inside card: Big lunar day number
+  // Left col inside card: Big lunar day number vertically centered
   const int leftColW = 100;
   const int leftColCenterX = cardMargin + leftColW / 2;
   char lunarDayStr[8];
   snprintf(lunarDayStr, sizeof(lunarDayStr), "%d", lunar.day);
   const int numW = renderer.getTextWidth(LEXENDDECA_16_FONT_ID, lunarDayStr);
-  renderer.drawText(LEXENDDECA_16_FONT_ID, leftColCenterX - numW / 2, heroCardY + 36, lunarDayStr, true,
+  const int numY = heroCardY + (heroCardH - 42) / 2;
+  renderer.drawText(LEXENDDECA_16_FONT_ID, leftColCenterX - numW / 2, numY, lunarDayStr, true,
                     EpdFontFamily::BOLD);
-  const int lblW = renderer.getTextWidth(SMALL_FONT_ID, tr(STR_LUNAR_DATE));
-  renderer.drawText(SMALL_FONT_ID, leftColCenterX - lblW / 2, heroCardY + 98, tr(STR_LUNAR_DATE));
 
   // Vertical divider inside hero card
   renderer.drawLine(cardMargin + leftColW, heroCardY + 12, cardMargin + leftColW, heroCardY + heroCardH - 12, true);
@@ -1545,42 +1544,42 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
   } else {
     snprintf(monthYearBuf, sizeof(monthYearBuf), tr(STR_LUNAR_MONTH_YEAR_FORMAT), lunar.month, yearCC.can, yearCC.chi);
   }
-  renderer.drawText(UI_10_FONT_ID, rightX, heroCardY + 16, monthYearBuf, true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, rightX, heroCardY + 14, monthYearBuf, true, EpdFontFamily::BOLD);
 
   char canChiDayMonthBuf[64];
   snprintf(canChiDayMonthBuf, sizeof(canChiDayMonthBuf), tr(STR_LUNAR_DAY_CANCHI_FORMAT), dayCC.can, dayCC.chi);
-  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 44, canChiDayMonthBuf);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 42, canChiDayMonthBuf);
 
   char canChiMonthBuf[64];
   snprintf(canChiMonthBuf, sizeof(canChiMonthBuf), tr(STR_LUNAR_MONTH_CANCHI_FORMAT), monthCC.can, monthCC.chi);
-  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 68, canChiMonthBuf);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 66, canChiMonthBuf);
 
   char solarTermBuf[48];
   snprintf(solarTermBuf, sizeof(solarTermBuf), "%s: %s", tr(STR_SOLAR_TERM), solarTerm);
-  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 92, solarTermBuf);
+  renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 90, solarTermBuf);
 
   if (holiday) {
     char holBuf[64];
     snprintf(holBuf, sizeof(holBuf), "★ %s", holiday);
-    renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 116, holBuf, true, EpdFontFamily::BOLD);
+    renderer.drawText(SMALL_FONT_ID, rightX, heroCardY + 114, holBuf, true, EpdFontFamily::BOLD);
   }
 
   // Monthly Calendar Grid Card
-  const int calCardY = 294;
-  const int calCardH = pageHeight - calCardY - 36;
+  const int calCardY = 302;
+  const int calCardH = pageHeight - calCardY - 18;
   renderer.drawRoundedRect(cardMargin, calCardY, cardW, calCardH, 1, 8, true);
 
   // Calendar Header: Month and Year
   char calHdrBuf[48];
   snprintf(calHdrBuf, sizeof(calHdrBuf), tr(STR_LUNAR_GRID_HEADER_FORMAT), solarMonth, solarYear);
-  renderer.drawCenteredText(UI_10_FONT_ID, calCardY + 10, calHdrBuf, true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_10_FONT_ID, calCardY + 12, calHdrBuf, true, EpdFontFamily::BOLD);
 
   // Weekday columns: CN, T2, T3, T4, T5, T6, T7
   static const StrId CAL_DAY_HDR[] = {StrId::STR_CAL_SUN, StrId::STR_CAL_MON, StrId::STR_CAL_TUE, StrId::STR_CAL_WED,
                                       StrId::STR_CAL_THU, StrId::STR_CAL_FRI, StrId::STR_CAL_SAT};
   const int cellW = (cardW - 16) / 7;
   const int gridLeft = cardMargin + (cardW - cellW * 7) / 2;
-  const int hdrY = calCardY + 34;
+  const int hdrY = calCardY + 36;
 
   for (int d = 0; d < 7; d++) {
     int cx = gridLeft + d * cellW + cellW / 2;
@@ -1613,13 +1612,15 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
     }
     int ltw = renderer.getTextWidth(SMALL_FONT_ID, lBuf);
 
+    const int textY = rowY + (cellH - 32) / 2;
+
     if (day == solarDay) {
-      renderer.fillRect(cx + 2, rowY - 2, cellW - 4, cellH - 2, true);
-      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, rowY, sBuf, false, EpdFontFamily::BOLD);
-      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, rowY + 16, lBuf, false);
+      renderer.fillRect(cx + 2, rowY + 2, cellW - 4, cellH - 4, true);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, textY, sBuf, false, EpdFontFamily::BOLD);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, textY + 16, lBuf, false);
     } else {
-      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, rowY, sBuf);
-      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, rowY + 16, lBuf);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - tw) / 2, textY, sBuf);
+      renderer.drawText(SMALL_FONT_ID, cx + (cellW - ltw) / 2, textY + 16, lBuf);
     }
 
     if (++col == 7) {
@@ -1627,8 +1628,6 @@ void SleepActivity::renderLunarCalendarSleepScreen() const {
       rowY += cellH;
     }
   }
-
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 20, tr(STR_LUNAR_CALENDAR_SLEEP));
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }

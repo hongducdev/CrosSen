@@ -1,10 +1,11 @@
 ---
 phase: 2
-title: "Implementation"
-status: pending
+title: Implementation
+status: completed
 priority: P2
-effort: "3h"
-dependencies: [1]
+effort: 3h
+dependencies:
+  - 1
 ---
 
 # Phase 2: Implementation

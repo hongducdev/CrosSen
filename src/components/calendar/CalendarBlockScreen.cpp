@@ -89,21 +89,9 @@ constexpr FixedHoliday kLunarHolidays[] = {
 
 constexpr int kCardInset = 18;    // card edge to page edge
 constexpr int kCardPadding = 20;  // card edge to content
-constexpr int kTopPadding = 24;   // card edge to the first band
 constexpr int kBannerHeight = 46;
-constexpr int kBandGap = 20;       // vertical rhythm between bands
-constexpr int kRuleGap = 7;        // the two hairlines of a double rule
-constexpr int kWeekdayGap = 14;    // weekday text to the rule under it
-constexpr int kHeroGapAbove = 30;  // rule to the day digits
-constexpr int kHeroCaptionGap = 8;
-constexpr int kLunarLineGap = 7;
-constexpr int kStackGap = 20;  // lunar block / holiday band / quote
+constexpr int kRuleGap = 7;  // the two hairlines of a double rule
 constexpr int kHolidayBandHeight = 38;
-constexpr int kQuoteRuleGap = 16;
-constexpr int kQuoteLineGap = 2;
-constexpr int kAuthorGap = 6;
-constexpr int kFooterBottom = 18;
-
 constexpr int kHeroDigitGap = 10;  // space between two day digits
 
 // The lunar series is only plotted inside this window: an unset RTC can report a
@@ -238,15 +226,10 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   char banner[64];
   std::snprintf(banner, sizeof(banner), "Tháng %u  ·  %u", static_cast<unsigned>(month), static_cast<unsigned>(year));
 
-  const char* festiveDayName = CalendarAlmanac::lunarDayName(lunar.day);
-  const char* lunarMonthName = CalendarAlmanac::lunarMonthName(lunar.month);
   const char* leapSuffix = lunar.isLeapMonth ? " (nhuận)" : "";
   char lunarTitle[128];
-  if (festiveDayName != nullptr) {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: %s  ·  %s%s", festiveDayName, lunarMonthName, leapSuffix);
-  } else {
-    std::snprintf(lunarTitle, sizeof(lunarTitle), "Âm lịch: Ngày %d  ·  %s%s", lunar.day, lunarMonthName, leapSuffix);
-  }
+  std::snprintf(lunarTitle, sizeof(lunarTitle), "Ngày %u  ·  Tháng %u%s", static_cast<unsigned>(lunar.day),
+                static_cast<unsigned>(lunar.month), leapSuffix);
 
   char yearCanChi[24];
   formatCanChi(getCanChiYear(lunar.year), yearCanChi, sizeof(yearCanChi));
@@ -285,85 +268,149 @@ bool draw(const GfxRenderer& renderer, const uint16_t year, const uint8_t month,
   const int bodyLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int quoteLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int authorHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int smallHeight = renderer.getLineHeight(SMALL_FONT_ID);
 
-  // --- Masthead, anchored to the card top ---------------------------------
-  int y = cardY + kTopPadding;
+  // --- Layout height calculations & dynamic vertical spacing --------------
+  const int bannerH = kBannerHeight;
+  const int weekdayH = titleLineHeight;
+  const int doubleRuleH = kRuleGap + 1;
+  const int heroH = CalendarDigitHeight;
 
-  renderer.fillRect(contentX, y, contentWidth, kBannerHeight, true);
-  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y + (kBannerHeight - titleLineHeight) / 2, contentWidth, banner,
-                     false, EpdFontFamily::BOLD);
-  y += kBannerHeight + kBandGap;
+  constexpr int lunarLineGap = 9;
+  const int hoursLinesCount = static_cast<int>(hoursLines.size());
+  const int almanacH = titleLineHeight + (bodyLineHeight * 2) + (hoursLinesCount * bodyLineHeight) +
+                       (2 + hoursLinesCount) * lunarLineGap;
 
-  // gregorianWeekday() counts from Sunday; the page lists Monday first.
+  const bool hasHoliday = (holiday != nullptr);
+  const int holidayH = hasHoliday ? kHolidayBandHeight : 0;
+
+  constexpr int quoteLineGap = 5;
+  constexpr int authorGap = 8;
+  const int quoteLinesCount = static_cast<int>(quoteLines.size());
+  const int quoteH = (quoteLinesCount * quoteLineHeight) +
+                     ((quoteLinesCount > 1 ? quoteLinesCount - 1 : 0) * quoteLineGap) + authorGap + authorHeight;
+
+  constexpr int singleRuleH = 1;
+
+  const int totalContentH = bannerH + weekdayH + (doubleRuleH * 2) + heroH + almanacH + holidayH + singleRuleH + quoteH;
+  const int totalSlack = cardHeight - totalContentH;
+
+  int weights[10];
+  int numGaps = 0;
+  if (hasHoliday) {
+    numGaps = 10;
+    weights[0] = 24;  // gapTop
+    weights[1] = 20;  // gapBannerToWeekday
+    weights[2] = 16;  // gapWeekdayToRule1
+    weights[3] = 34;  // gapRule1ToHero
+    weights[4] = 34;  // gapHeroToRule2
+    weights[5] = 28;  // gapRule2ToAlmanac
+    weights[6] = 26;  // gapAlmanacToHoliday
+    weights[7] = 24;  // gapHolidayToRule3
+    weights[8] = 26;  // gapRule3ToQuote
+    weights[9] = 28;  // gapBottom
+  } else {
+    numGaps = 9;
+    weights[0] = 24;  // gapTop
+    weights[1] = 20;  // gapBannerToWeekday
+    weights[2] = 16;  // gapWeekdayToRule1
+    weights[3] = 36;  // gapRule1ToHero
+    weights[4] = 36;  // gapHeroToRule2
+    weights[5] = 30;  // gapRule2ToAlmanac
+    weights[6] = 34;  // gapAlmanacToRule3
+    weights[7] = 28;  // gapRule3ToQuote
+    weights[8] = 30;  // gapBottom
+  }
+
+  int weightSum = 0;
+  for (int i = 0; i < numGaps; ++i) weightSum += weights[i];
+
+  int gaps[10];
+  int allocatedSlack = 0;
+  for (int i = 0; i < numGaps; ++i) {
+    gaps[i] = (totalSlack * weights[i]) / weightSum;
+    allocatedSlack += gaps[i];
+  }
+  int remainder = totalSlack - allocatedSlack;
+  for (int i = 3; remainder > 0 && i < numGaps - 1; ++i) {
+    gaps[i]++;
+    remainder--;
+  }
+
+  // --- Rendering sequence -------------------------------------------------
+  int y = cardY + gaps[0];
+
+  // 1. Banner
+  renderer.fillRect(contentX, y, contentWidth, bannerH, true);
+  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y + (bannerH - titleLineHeight) / 2, contentWidth, banner, false,
+                     EpdFontFamily::BOLD);
+  y += bannerH + gaps[1];
+
+  // 2. Weekday
   const int weekday = (gregorianWeekday(day, month, year) + 6) % 7;
   drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y, contentWidth, weekdayName(weekday), true,
                      EpdFontFamily::BOLD);
-  y += renderer.getLineHeight(UI_12_FONT_ID) + kWeekdayGap;
+  y += weekdayH + gaps[2];
+
+  // 3. Double rule 1
   drawDoubleRule(renderer, contentX, y, contentWidth);
+  y += doubleRuleH + gaps[3];
 
-  y += kRuleGap + kHeroGapAbove;
+  // 4. Hero Day digits (160px)
   drawHeroDay(renderer, centerX, y, day);
-  y += CalendarDigitHeight + kHeroCaptionGap;
-  drawCentered(renderer, SMALL_FONT_ID, centerX, y, "Dương lịch", true);
-  const int mastheadBottom = y + smallHeight;
+  y += heroH + gaps[4];
 
-  // --- Footer, anchored to the card bottom --------------------------------
-  // Sizes are known before drawing, so the block can be positioned as a whole
-  // and the leftover space becomes one deliberate gap under the masthead.
-  int footerHeight = kRuleGap + 1 + kBandGap;
-  footerHeight += titleLineHeight + kLunarLineGap;
-  footerHeight += (bodyLineHeight + kLunarLineGap) * 2;
-  footerHeight += static_cast<int>(hoursLines.size()) * (bodyLineHeight + kLunarLineGap);
-  footerHeight += kStackGap;
-  if (holiday != nullptr) {
-    footerHeight += kHolidayBandHeight + kStackGap;
+  // 5. Double rule 2
+  drawDoubleRule(renderer, contentX, y, contentWidth);
+  y += doubleRuleH + gaps[5];
+
+  // 6. Almanac block
+  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y, contentWidth, lunarTitle, true, EpdFontFamily::BOLD);
+  y += titleLineHeight + lunarLineGap;
+  drawCenteredFitted(renderer, UI_10_FONT_ID, centerX, y, contentWidth, pillarYear);
+  y += bodyLineHeight + lunarLineGap;
+  drawCenteredFitted(renderer, UI_10_FONT_ID, centerX, y, contentWidth, pillarMonthDay);
+  y += bodyLineHeight + lunarLineGap;
+  for (size_t i = 0; i < hoursLines.size(); ++i) {
+    drawCentered(renderer, UI_10_FONT_ID, centerX, y, hoursLines[i].c_str(), true);
+    if (i + 1 < hoursLines.size()) {
+      y += bodyLineHeight + lunarLineGap;
+    } else {
+      y += bodyLineHeight;
+    }
   }
-  footerHeight += kQuoteRuleGap + 1 + kQuoteRuleGap;
-  footerHeight += static_cast<int>(quoteLines.size()) * (quoteLineHeight + kQuoteLineGap);
-  footerHeight += kAuthorGap + authorHeight;
 
-  const int minimumFooterTop = mastheadBottom + kBandGap;
-  int footerTop = cardBottom - kFooterBottom - footerHeight;
-  if (footerTop < minimumFooterTop) footerTop = minimumFooterTop;
-
-  int fy = footerTop;
-  drawDoubleRule(renderer, contentX, fy, contentWidth);
-  fy += kRuleGap + 1 + kBandGap;
-
-  drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, fy, contentWidth, lunarTitle, true, EpdFontFamily::BOLD);
-  fy += titleLineHeight + kLunarLineGap;
-  drawCenteredFitted(renderer, UI_10_FONT_ID, centerX, fy, contentWidth, pillarYear);
-  fy += bodyLineHeight + kLunarLineGap;
-  drawCenteredFitted(renderer, UI_10_FONT_ID, centerX, fy, contentWidth, pillarMonthDay);
-  fy += bodyLineHeight + kLunarLineGap;
-  for (const std::string& line : hoursLines) {
-    drawCentered(renderer, UI_10_FONT_ID, centerX, fy, line.c_str(), true);
-    fy += bodyLineHeight + kLunarLineGap;
-  }
-  fy += kStackGap - kLunarLineGap;
-
-  if (holiday != nullptr) {
-    renderer.drawRect(contentX, fy, contentWidth, kHolidayBandHeight, 1, true);
-    drawCenteredFitted(renderer, UI_12_FONT_ID, centerX,
-                       fy + (kHolidayBandHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2, contentWidth - 16,
+  // 7. Holiday (if present)
+  if (hasHoliday) {
+    y += gaps[6];
+    renderer.drawRect(contentX, y, contentWidth, holidayH, 1, true);
+    drawCenteredFitted(renderer, UI_12_FONT_ID, centerX, y + (holidayH - titleLineHeight) / 2, contentWidth - 16,
                        holiday, true, EpdFontFamily::BOLD);
-    fy += kHolidayBandHeight + kStackGap;
+    y += holidayH + gaps[7];
+  } else {
+    y += gaps[6];
   }
 
-  drawRule(renderer, contentX, fy, contentWidth);
-  fy += kQuoteRuleGap;
-  for (const std::string& line : quoteLines) {
-    drawCentered(renderer, UI_12_FONT_ID, centerX, fy, line.c_str(), true);
-    fy += quoteLineHeight + kQuoteLineGap;
-  }
-  fy += kAuthorGap;
+  // 8. Single Rule
+  drawRule(renderer, contentX, y, contentWidth);
+  y += singleRuleH + (hasHoliday ? gaps[8] : gaps[7]);
 
+  // 9. Quote lines
+  for (size_t i = 0; i < quoteLines.size(); ++i) {
+    drawCentered(renderer, UI_12_FONT_ID, centerX, y, quoteLines[i].c_str(), true);
+    if (i + 1 < quoteLines.size()) {
+      y += quoteLineHeight + quoteLineGap;
+    } else {
+      y += quoteLineHeight;
+    }
+  }
+  y += authorGap;
+
+  // 10. Author
   char author[64];
   std::snprintf(author, sizeof(author), "— %s", quote.author);
   const std::string fittedAuthor = renderer.truncatedText(UI_10_FONT_ID, author, contentWidth, EpdFontFamily::ITALIC);
   const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, fittedAuthor.c_str(), EpdFontFamily::ITALIC);
-  renderer.drawText(UI_10_FONT_ID, cardRight - kCardPadding - authorWidth, fy, fittedAuthor.c_str(), true,
+  renderer.drawText(UI_10_FONT_ID, cardRight - kCardPadding - authorWidth, y, fittedAuthor.c_str(), true,
                     EpdFontFamily::ITALIC);
 
   return true;
