@@ -64,7 +64,8 @@ def apply_patches(project_dir, dependency_dir):
     # Archive dependencies must not discover the enclosing application Git repo.
     process_env = {key: os.environ[key] for key in ("HOME", "PATH", "TMPDIR", "LANG") if key in os.environ}
     process_env.update(GIT_CEILING_DIRECTORIES=str(dependency.parent),
-                       GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+                       GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                       GIT_DIR=os.devnull)
     pending = []
     for name, relative, upstream, patched in PATCHES:
         target = dependency / relative
@@ -73,7 +74,7 @@ def apply_patches(project_dir, dependency_dir):
             raise RuntimeError("Unrecognized SdFat source: " + relative)
         patch = project / "scripts" / "sdfat_patches" / name
         # Validate the entire set before changing any dependency files.
-        command = ["git", "apply", "--check"]
+        command = ["git", "apply", "--ignore-whitespace", "--check"]
         if current == patched:
             command.append("--reverse")
         result = subprocess.run(command + [str(patch)], cwd=dependency,
@@ -83,7 +84,7 @@ def apply_patches(project_dir, dependency_dir):
         if current == upstream:
             pending.append((patch, target, patched))
     for patch, target, expected in pending:
-        subprocess.run(["git", "apply", str(patch)], cwd=dependency, env=process_env, check=True)
+        subprocess.run(["git", "apply", "--ignore-whitespace", str(patch)], cwd=dependency, env=process_env, check=True)
         if digest(target) != expected:
             raise RuntimeError("Unexpected patched SdFat source: " + target.name)
         print("Applied SdFat patch: " + patch.name)
